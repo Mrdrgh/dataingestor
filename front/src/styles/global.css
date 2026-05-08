@@ -1,0 +1,130 @@
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  --bg-primary: #0e1117;
+  --bg-secondary: #13181f;
+  --bg-surface: #1a2130;
+  --bg-surface-hover: #1f2840;
+  --bg-input: #0d1219;
+  --bg-tag: #1c2535;
+
+  --border-subtle: rgba(255, 255, 255, 0.06);
+  --border-default: rgba(255, 255, 255, 0.10);
+  --border-strong: rgba(255, 255, 255, 0.18);
+  --border-focus: #1e6ef4;
+
+  --text-primary: #e2e8f0;
+  --text-secondary: #8b97b0;
+  --text-muted: #59647a;
+  --text-link: #4a9eff;
+
+  --accent-blue: #1e6ef4;
+  --accent-blue-hover: #3a82f7;
+  --accent-blue-dim: rgba(30, 110, 244, 0.12);
+  --accent-blue-border: rgba(30, 110, 244, 0.30);
+
+  --green: #1a9e6e;
+  --green-dim: rgba(26, 158, 110, 0.12);
+  --green-border: rgba(26, 158, 110, 0.30);
+  --green-text: #2ec995;
+
+  --red: #d94f4f;
+  --red-dim: rgba(217, 79, 79, 0.10);
+  --red-border: rgba(217, 79, 79, 0.28);
+  --red-text: #f07070;
+
+  --amber: #c87d20;
+  --amber-dim: rgba(200, 125, 32, 0.12);
+  --amber-text: #f0a347;
+
+  --sidebar-width: 220px;
+  --header-height: 48px;
+
+  --font-sans: 'IBM Plex Sans', sans-serif;
+  --font-mono: 'IBM Plex Mono', monospace;
+
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+}
+
+html, body, #root {
+  height: 100%;
+  width: 100%;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+.app-shell {
+  display: flex;
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+}
+
+.main-content {
+  flex: 1;
+  overflow-y: auto;
+  background: var(--bg-primary);
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.10);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+button {
+  font-family: var(--font-sans);
+  cursor: pointer;
+  border: none;
+  outline: none;
+}
+
+input, textarea, select {
+  font-family: var(--font-sans);
+  outline: none;
+}
+
+a {
+  color: var(--text-link);
+  text-decoration: none;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.65); }
+}
+
+.fade-in {
+  animation: fadeIn 0.25s ease forwards;
+}
