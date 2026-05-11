@@ -1,4 +1,4 @@
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   IsArray,
   IsIn,
@@ -24,6 +24,9 @@ class UpdatePipelineSourceDto {
 
 class UpdatePipelineIngestionDto {
   @IsOptional()
+  @Transform(({ value }: { value: string }) =>
+    value === 'full_refresh' ? 'full' : value,
+  )
   @IsIn(['full', 'incremental'])
   mode?: 'full' | 'incremental';
 

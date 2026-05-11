@@ -23,6 +23,7 @@ import {
 export class PipelinesService {
   private readonly filePath: string;
   private readonly dagsDir: string;
+  private readonly sparkJobsDir: string;
   private readonly deltaBasePath: string;
   private writeQueue: Promise<void> = Promise.resolve();
 
@@ -35,11 +36,16 @@ export class PipelinesService {
     this.filePath = path.resolve(process.cwd(), pipelinesFile);
 
     const dagsDir =
-      this.config.get<string>('AIRFLOW_DAGS_DIR') ?? '../airflow/dags';
+      this.config.get<string>('AIRFLOW_DAGS_DIR') ?? '../airflow/dags/generated';
     this.dagsDir = path.resolve(process.cwd(), dagsDir);
 
+    const sparkJobsDir =
+      this.config.get<string>('AIRFLOW_SPARK_JOBS_DIR') ??
+      '../airflow_spark_delta/spark/jobs';
+    this.sparkJobsDir = path.resolve(process.cwd(), sparkJobsDir);
+
     this.deltaBasePath =
-      this.config.get<string>('DELTA_BASE_PATH') ?? './delta';
+      this.config.get<string>('DELTA_BASE_PATH') ?? '../airflow_spark_delta/delta';
   }
 
   async list(): Promise<PipelineDefinition[]> {
@@ -67,6 +73,7 @@ export class PipelinesService {
 
     data.pipelines.push(pipeline);
     await this.saveFile(data);
+    await this.writeSparkConfigFile(pipeline);
     await this.writeDagFile(pipeline);
 
     return pipeline;
@@ -88,6 +95,7 @@ export class PipelinesService {
 
     data.pipelines[index] = updated;
     await this.saveFile(data);
+    await this.writeSparkConfigFile(updated);
     await this.writeDagFile(updated);
 
     return updated;
@@ -104,6 +112,7 @@ export class PipelinesService {
     const [removed] = data.pipelines.splice(index, 1);
     await this.saveFile(data);
     await this.removeDagFile(removed);
+    await this.removeSparkConfigFile(removed);
   }
 
   async validate(dto: CreatePipelineDto): Promise<Record<string, unknown>> {
@@ -138,6 +147,9 @@ export class PipelinesService {
         dagId,
         filePath: this.buildDagRelativePath(dagId),
       },
+      spark: {
+        configPath: this.buildSparkConfigRelativePath(dagId),
+      },
     };
   }
 
@@ -170,6 +182,9 @@ export class PipelinesService {
       schedule: {
         ...current.schedule,
         ...this.normalizeSchedule(dto.schedule),
+      },
+      spark: current.spark ?? {
+        configPath: this.buildSparkConfigRelativePath(current.dag.dagId),
       },
       updatedAt: new Date().toISOString(),
     };
@@ -377,6 +392,7 @@ export class PipelinesService {
   private async ensureStorageFile(): Promise<void> {
     await fs.mkdir(path.dirname(this.filePath), { recursive: true });
     await fs.mkdir(this.dagsDir, { recursive: true });
+    await fs.mkdir(this.sparkJobsDir, { recursive: true });
 
     try {
       await fs.access(this.filePath);
@@ -409,23 +425,111 @@ export class PipelinesService {
     return path.relative(process.cwd(), filePath);
   }
 
+  private buildSparkConfigRelativePath(dagId: string): string {
+    const filePath = path.join(this.sparkJobsDir, `${dagId}.json`);
+    return path.relative(process.cwd(), filePath);
+  }
+
+  private getSparkConfigContainerPath(dagId: string): string {
+    return `/opt/airflow/spark/jobs/${dagId}.json`;
+  }
+
+  private async writeSparkConfigFile(pipeline: PipelineDefinition): Promise<void> {
+    const filePath = path.join(this.sparkJobsDir, `${pipeline.dag.dagId}.json`);
+    const payload = {
+      pipelineId: pipeline.id,
+      dagId: pipeline.dag.dagId,
+      source: pipeline.source,
+      ingestion: pipeline.ingestion,
+      destination: pipeline.destination,
+      schedule: pipeline.schedule,
+    };
+
+    await fs.mkdir(path.dirname(filePath), { recursive: true });
+    await fs.writeFile(filePath, JSON.stringify(payload, null, 2));
+  }
+
   private async writeDagFile(pipeline: PipelineDefinition): Promise<void> {
     const filePath = path.join(this.dagsDir, `${pipeline.dag.dagId}.py`);
-    const configJson = JSON.stringify(pipeline);
-    const configBase64 = Buffer.from(configJson, 'utf-8').toString('base64');
-
     const scheduleInterval = pipeline.schedule.cron
       ? `'${pipeline.schedule.cron}'`
       : 'None';
+    const sparkConfigPath = this.getSparkConfigContainerPath(pipeline.dag.dagId);
 
-    const content = `import base64\nimport json\nfrom datetime import datetime\n\nfrom airflow import DAG\nfrom airflow.operators.empty import EmptyOperator\nfrom airflow.operators.python import PythonOperator\n\nPIPELINE_CONFIG = json.loads(\n    base64.b64decode(\"${configBase64}\").decode(\"utf-8\")\n)\n\n\ndef run_ingestion(**_context):\n    print(\"Pipeline config:\", PIPELINE_CONFIG)\n\n\nwith DAG(\n    dag_id=\"${pipeline.dag.dagId}\",\n    schedule_interval=${scheduleInterval},\n    start_date=datetime(2024, 1, 1),\n    catchup=False,\n    is_paused_upon_creation=${pipeline.schedule.cron ? 'False' : 'True'},\n    tags=[\"ingestion\"],\n) as dag:\n    start = EmptyOperator(task_id=\"start\")\n    ingest = PythonOperator(task_id=\"ingest\", python_callable=run_ingestion)\n    finish = EmptyOperator(task_id=\"finish\")\n\n    start >> ingest >> finish\n`;
+    const pgHost = this.config.get<string>('PGHOST') ?? 'localhost';
+    const pgPort = String(this.config.get<number | string>('PGPORT') ?? '5432');
+    const pgDatabase = this.config.get<string>('PGDATABASE') ?? 'postgres';
+    const pgUser = this.config.get<string>('PGUSER') ?? 'postgres';
+    const pgPassword = this.config.get<string>('PGPASSWORD') ?? 'postgres';
+
+    const content = `import os
+from datetime import datetime
+
+from airflow import DAG
+from airflow.operators.empty import EmptyOperator
+from airflow.operators.bash import BashOperator
+
+with DAG(
+    dag_id="${pipeline.dag.dagId}",
+    schedule_interval=${scheduleInterval},
+    start_date=datetime(2024, 1, 1),
+    catchup=False,
+    is_paused_upon_creation=${pipeline.schedule.cron ? 'False' : 'True'},
+    tags=["ingestion"],
+) as dag:
+    start = EmptyOperator(task_id="start")
+
+    env = os.environ.copy()
+    env.update({
+        "SOURCE_PGHOST": "${pgHost}",
+        "SOURCE_PGPORT": "${pgPort}",
+        "SOURCE_PGDATABASE": "${pgDatabase}",
+        "SOURCE_PGUSER": "${pgUser}",
+        "SOURCE_PGPASSWORD": "${pgPassword}",
+    })
+
+    ingest = BashOperator(
+        task_id="ingest",
+        bash_command="python /opt/airflow/dags/spark_ingest.py --config '${sparkConfigPath}'",
+        env=env,
+    )
+
+    finish = EmptyOperator(task_id="finish")
+
+    start >> ingest >> finish
+`;
+
+    this.assertGeneratedDagContent(content);
 
     await fs.mkdir(path.dirname(filePath), { recursive: true });
     await fs.writeFile(filePath, content);
   }
 
+  private assertGeneratedDagContent(content: string): void {
+    if (!content.includes('from airflow import DAG')) {
+      throw new BadRequestException('Generated DAG content is invalid: missing DAG import');
+    }
+
+    if (!content.includes('with DAG(')) {
+      throw new BadRequestException('Generated DAG content is invalid: missing DAG definition');
+    }
+
+    if (/\n\s{2,}import\s/.test(content)) {
+      throw new BadRequestException('Generated DAG content is invalid: malformed import indentation');
+    }
+  }
+
   private async removeDagFile(pipeline: PipelineDefinition): Promise<void> {
     const filePath = path.join(this.dagsDir, `${pipeline.dag.dagId}.py`);
+    try {
+      await fs.unlink(filePath);
+    } catch {
+      return;
+    }
+  }
+
+  private async removeSparkConfigFile(pipeline: PipelineDefinition): Promise<void> {
+    const filePath = path.join(this.sparkJobsDir, `${pipeline.dag.dagId}.json`);
     try {
       await fs.unlink(filePath);
     } catch {

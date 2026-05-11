@@ -83,12 +83,17 @@ export class IngestionController {
   ): Promise<Record<string, unknown>> {
     const pipeline = await this.pipelines.getByIdOrThrow(pipelineId);
     const conf = { pipelineId: pipeline.id, ...(body.conf ?? {}) };
-
-    return this.airflow.triggerDagRun(
+    const run = await this.airflow.triggerDagRun(
       pipeline.dag.dagId,
       body.dagRunId,
       conf,
     );
+
+    return {
+      pipelineId: pipeline.id,
+      dagId: pipeline.dag.dagId,
+      ...run,
+    };
   }
 
   @Get('pipelines/:pipelineId/runs/:runId')

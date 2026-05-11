@@ -65,13 +65,25 @@ const stackItems = [
   },
 ];
 
-const statCards = [
-  { label: "Connectors available", value: "1", sub: "PostgreSQL" },
-  { label: "Pipelines created", value: "0", sub: "None yet" },
-  { label: "Backend status", value: "Mock", sub: "Awaiting Java API" },
-];
+import { useEffect } from "react";
+import { api } from "../api/endpoints";
+import { useApi } from "../hooks/useApi";
 
 export default function HomePage({ onNavigate }) {
+  const { execute: checkHealth, data: healthData, loading: healthLoading, error: healthError } = useApi(api.getHealth);
+
+  useEffect(() => {
+    checkHealth().catch(() => {}); // Catch to avoid unhandled promise rejection
+  }, [checkHealth]);
+
+  const backendStatusValue = healthLoading ? "Checking..." : (healthError ? "Offline" : "Online");
+  const backendStatusSub = healthData ? "NestJS API Connected" : (healthError ? "Connection Failed" : "Connecting to API");
+
+  const statCards = [
+    { label: "Connectors available", value: "1", sub: "PostgreSQL" },
+    { label: "Pipelines created", value: "0", sub: "None yet" },
+    { label: "Backend status", value: backendStatusValue, sub: backendStatusSub },
+  ];
   return (
     <div style={styles.page} className="fade-in">
       <div style={styles.topBar}>
@@ -113,8 +125,8 @@ export default function HomePage({ onNavigate }) {
         <div style={styles.sectionHeader}>
           <h2 style={styles.sectionTitle}>Technology Stack</h2>
           <p style={styles.sectionSub}>
-            The frontend sends JSON payloads to a Java REST API. All backend services are abstracted away
-            — the UI knows nothing about Airflow or Spark directly.
+            The frontend communicates with a NestJS backend via a unified API client. The backend abstracts away
+            the complexities of Airflow and Spark, allowing you to manage pipelines through a simple REST API.
           </p>
         </div>
 
@@ -137,7 +149,7 @@ export default function HomePage({ onNavigate }) {
         <h2 style={styles.sectionTitle}>Architecture</h2>
         <p style={styles.sectionSub} >How data flows through the platform</p>
         <div style={styles.archRow}>
-          {["React UI", "Java REST API", "Airflow DAG", "Spark Job", "Delta Lake"].map((label, i, arr) => (
+          {["React UI", "NestJS API", "Airflow DAG", "Spark Job", "Delta Lake"].map((label, i, arr) => (
             <div key={i} style={styles.archGroup}>
               <div style={styles.archNode}>{label}</div>
               {i < arr.length - 1 && (
@@ -155,11 +167,11 @@ export default function HomePage({ onNavigate }) {
 
       <div style={styles.section}>
         <div style={styles.noticeBox}>
-          <div style={styles.noticeTitle}>Development mode — mocked backend</div>
+          <div style={styles.noticeTitle}>API Client Integrated</div>
           <div style={styles.noticeSub}>
-            All API calls use <code style={styles.code}>setTimeout</code> to simulate network latency.
-            Replace the mock functions in <code style={styles.code}>src/api/</code> with real
-            <code style={styles.code}>fetch()</code> calls once the Java REST API is live.
+            The frontend now uses the <code style={styles.code}>src/api/client.js</code> wrapper
+            to fetch data. The connection status above reflects the actual reachability of the
+            <code style={styles.code}>http://localhost:3001/health</code> endpoint.
           </div>
         </div>
       </div>

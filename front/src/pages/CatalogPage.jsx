@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { api } from "../api/endpoints";
 
 // ─── Icons ────────────────────────────────────────────────────────────────────
 const IconChevron = ({ open }) => (
@@ -47,76 +48,7 @@ const IconTag = () => (
 );
 
 // ─── Mock catalog data ────────────────────────────────────────────────────────
-const CATALOG = [
-  {
-    name: "fusion_catalog",
-    schemas: [
-      {
-        name: "raw",
-        tables: [
-          {
-            name: "orders",
-            format: "Delta", rows: "1,204,441", size: "2.4 GB", lastUpdated: "2 min ago",
-            columns: [
-              { name: "order_id",    type: "BIGINT",    nullable: false, pk: true },
-              { name: "user_id",     type: "BIGINT",    nullable: false },
-              { name: "status",      type: "STRING",    nullable: false },
-              { name: "total_usd",   type: "DECIMAL",   nullable: true  },
-              { name: "created_at",  type: "TIMESTAMP", nullable: false },
-              { name: "updated_at",  type: "TIMESTAMP", nullable: false },
-            ],
-          },
-          {
-            name: "users",
-            format: "Delta", rows: "204,112", size: "380 MB", lastUpdated: "1h ago",
-            columns: [
-              { name: "user_id",     type: "BIGINT",  nullable: false, pk: true },
-              { name: "email",       type: "STRING",  nullable: false },
-              { name: "username",    type: "STRING",  nullable: false },
-              { name: "created_at",  type: "TIMESTAMP", nullable: false },
-            ],
-          },
-          {
-            name: "events",
-            format: "Delta", rows: "18,442,001", size: "14.2 GB", lastUpdated: "1h ago",
-            columns: [
-              { name: "event_id",   type: "STRING",    nullable: false, pk: true },
-              { name: "user_id",    type: "BIGINT",    nullable: true },
-              { name: "event_type", type: "STRING",    nullable: false },
-              { name: "payload",    type: "STRING",    nullable: true },
-              { name: "ts",         type: "TIMESTAMP", nullable: false },
-            ],
-          },
-        ],
-      },
-      {
-        name: "curated",
-        tables: [
-          {
-            name: "orders_enriched",
-            format: "Delta", rows: "980,221", size: "1.8 GB", lastUpdated: "3h ago",
-            columns: [
-              { name: "order_id",   type: "BIGINT",  nullable: false, pk: true },
-              { name: "email",      type: "STRING",  nullable: false },
-              { name: "status",     type: "STRING",  nullable: false },
-              { name: "region",     type: "STRING",  nullable: true },
-              { name: "updated_at", type: "TIMESTAMP", nullable: false },
-            ],
-          },
-          {
-            name: "daily_revenue",
-            format: "Delta", rows: "365", size: "2.1 MB", lastUpdated: "Daily",
-            columns: [
-              { name: "date",           type: "DATE",    nullable: false, pk: true },
-              { name: "total_revenue",  type: "DECIMAL", nullable: false },
-              { name: "order_count",    type: "BIGINT",  nullable: false },
-            ],
-          },
-        ],
-      },
-    ],
-  },
-];
+// Removed mock catalog data
 
 const TYPE_COLORS = {
   BIGINT: "#4a9eff", STRING: "#2ec995", DECIMAL: "#f0a347",
@@ -289,16 +221,32 @@ function CatalogNode({ catalog, selectedTable, onSelect }) {
 export default function CatalogPage() {
   const [selected, setSelected] = useState(null);
   const [search, setSearch] = useState("");
+  const [catalog, setCatalog] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function load() {
+      try {
+        const data = await api.getCatalog();
+        setCatalog(data);
+      } catch (err) {
+        console.error("Failed to load catalog", err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    load();
+  }, []);
 
   const filteredCatalog = search.trim()
-    ? CATALOG.map(cat => ({
+    ? catalog.map(cat => ({
         ...cat,
         schemas: cat.schemas.map(sc => ({
           ...sc,
           tables: sc.tables.filter(t => t.name.includes(search.toLowerCase())),
         })).filter(sc => sc.tables.length > 0),
       })).filter(cat => cat.schemas.length > 0)
-    : CATALOG;
+    : catalog;
 
   return (
     <div style={s.page} className="fade-in">
@@ -328,14 +276,24 @@ export default function CatalogPage() {
             />
           </div>
           <div style={s.treeBody}>
-            {filteredCatalog.map(cat => (
-              <CatalogNode
-                key={cat.name}
-                catalog={cat}
-                selectedTable={selected?.table}
-                onSelect={setSelected}
-              />
-            ))}
+            {loading ? (
+              <div style={{ padding: "20px", color: "#8b97b0", fontSize: 13, textAlign: "center" }}>
+                Loading catalog...
+              </div>
+            ) : filteredCatalog.length === 0 ? (
+              <div style={{ padding: "20px", color: "#8b97b0", fontSize: 13, textAlign: "center" }}>
+                No tables found
+              </div>
+            ) : (
+              filteredCatalog.map(cat => (
+                <CatalogNode
+                  key={cat.name}
+                  catalog={cat}
+                  selectedTable={selected?.table}
+                  onSelect={setSelected}
+                />
+              ))
+            )}
           </div>
         </div>
 

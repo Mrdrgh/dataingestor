@@ -4,6 +4,7 @@ import HomePage from "./pages/HomePage";
 import DataIngestionPage from "./pages/DataIngestionPage";
 import PipelinesPage from "./pages/PipelinesPage";
 import CatalogPage from "./pages/CatalogPage";
+import AdminPage from "./pages/AdminPage";
 import "./styles/global.css";
 
 export default function App() {
@@ -19,6 +20,8 @@ export default function App() {
         return <PipelinesPage />;
       case "catalog":
         return <CatalogPage />;
+      case "admin":
+        return <AdminPage />;
       default:
         return <HomePage onNavigate={setActivePage} />;
     }

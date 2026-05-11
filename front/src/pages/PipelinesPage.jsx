@@ -27,61 +27,16 @@ const IconDot = ({ color }) => (
   <span style={{ display: "inline-block", width: 7, height: 7, borderRadius: "50%", background: color, flexShrink: 0 }} />
 );
 
-// ─── Mock Data ────────────────────────────────────────────────────────────────
-const MOCK_PIPELINES = [
-  {
-    id: "pl_001",
-    name: "postgres_orders_ingestion",
-    source: "PostgreSQL → fusion_catalog.raw.orders",
-    mode: "Incremental (CDC)",
-    schedule: "Every hour",
-    status: "success",
-    lastRun: "2 min ago",
-    duration: "1m 14s",
-    runs: [
-      { id: "r1", startedAt: "Today, 14:00", duration: "1m 14s", status: "success", rows: "12,441" },
-      { id: "r2", startedAt: "Today, 13:00", duration: "1m 09s", status: "success", rows: "9,872" },
-      { id: "r3", startedAt: "Today, 12:00", duration: "2m 01s", status: "failed",  rows: "—" },
-      { id: "r4", startedAt: "Today, 11:00", duration: "1m 18s", status: "success", rows: "11,034" },
-      { id: "r5", startedAt: "Today, 10:00", duration: "58s",    status: "success", rows: "8,210" },
-    ],
-  },
-  {
-    id: "pl_002",
-    name: "postgres_users_full_refresh",
-    source: "PostgreSQL → fusion_catalog.raw.users",
-    mode: "Full refresh",
-    schedule: "Daily",
-    status: "running",
-    lastRun: "Just now",
-    duration: "—",
-    runs: [
-      { id: "r1", startedAt: "Today, 14:03", duration: "—",      status: "running", rows: "—" },
-      { id: "r2", startedAt: "Yesterday, 14:00", duration: "3m 44s", status: "success", rows: "204,112" },
-      { id: "r3", startedAt: "2 days ago, 14:00", duration: "3m 51s", status: "success", rows: "201,988" },
-    ],
-  },
-  {
-    id: "pl_003",
-    name: "postgres_events_snapshot",
-    source: "PostgreSQL → fusion_catalog.raw.events",
-    mode: "Snapshot and merge",
-    schedule: "Manual",
-    status: "failed",
-    lastRun: "1h ago",
-    duration: "0m 32s",
-    runs: [
-      { id: "r1", startedAt: "Today, 13:12", duration: "32s", status: "failed",  rows: "—" },
-      { id: "r2", startedAt: "Yesterday, 10:00", duration: "4m 22s", status: "success", rows: "1,204,441" },
-    ],
-  },
-];
+import { useEffect } from "react";
+import { api } from "../api/endpoints";
+import { useApi } from "../hooks/useApi";
 
 const STATUS_CONFIG = {
   success: { color: "#2ec995", bg: "rgba(26,158,110,0.10)", border: "rgba(26,158,110,0.25)", label: "Success" },
   running: { color: "#4a9eff", bg: "rgba(30,110,244,0.10)", border: "rgba(30,110,244,0.25)", label: "Running" },
   failed:  { color: "#f07070", bg: "rgba(217,79,79,0.10)",  border: "rgba(217,79,79,0.25)",  label: "Failed"  },
   paused:  { color: "#f0a347", bg: "rgba(200,125,32,0.10)", border: "rgba(200,125,32,0.25)", label: "Paused"  },
+  idle:    { color: "#8b97b0", bg: "rgba(255,255,255,0.05)", border: "rgba(255,255,255,0.10)", label: "Idle"  },
 };
 
 function StatusBadge({ status, small }) {
@@ -120,14 +75,73 @@ function RunRow({ run }) {
   );
 }
 
+function RunHistory({ pipelineId }) {
+  const { execute: fetchRuns, data: runsData, loading, error } = useApi(api.getPipelineRuns, true);
+  
+  useEffect(() => {
+    fetchRuns(pipelineId).catch(() => {});
+  }, [fetchRuns, pipelineId]);
+
+  if (loading) return <div style={{ padding: "20px 16px", color: "#8b97b0", fontSize: 12 }}>Loading runs...</div>;
+  if (error) return <div style={{ padding: "20px 16px", color: "#f07070", fontSize: 12 }}>Error loading runs: {error}</div>;
+
+  const runs = runsData?.runs || [];
+
+  return (
+    <div style={s.runHistory} className="fade-in">
+      <div style={s.runHistoryHeader}>Run history</div>
+      <div style={s.runTableHead}>
+        <div style={{ flex: "0 0 200px", fontSize: 11, color: "#3d4a5c", fontWeight: 500, letterSpacing: "0.06em", textTransform: "uppercase" }}>Started</div>
+        <div style={{ flex: "0 0 80px", fontSize: 11, color: "#3d4a5c", fontWeight: 500, letterSpacing: "0.06em", textTransform: "uppercase" }}>Status</div>
+        <div style={{ flex: "0 0 80px", fontSize: 11, color: "#3d4a5c", fontWeight: 500, letterSpacing: "0.06em", textTransform: "uppercase" }}>Duration</div>
+        <div style={{ fontSize: 11, color: "#3d4a5c", fontWeight: 500, letterSpacing: "0.06em", textTransform: "uppercase" }}>Rows loaded</div>
+      </div>
+      {runs.length === 0 ? (
+        <div style={{ padding: "10px 0", fontSize: 12, color: "#59647a" }}>No runs found.</div>
+      ) : (
+        runs.map(run => {
+          const duration = run.endDate && run.startDate ? `${Math.round((new Date(run.endDate) - new Date(run.startDate)) / 1000)}s` : "—";
+          return (
+            <RunRow 
+              key={run.runId} 
+              run={{
+                status: run.state || "paused",
+                startedAt: run.startDate ? new Date(run.startDate).toLocaleString() : "Unknown",
+                duration: duration,
+                rows: "—"
+              }} 
+            />
+          );
+        })
+      )}
+    </div>
+  );
+}
+
 function PipelineRow({ pipeline }) {
   const [expanded, setExpanded] = useState(false);
-  const [triggerState, setTriggerState] = useState("idle");
+  const [triggerError, setTriggerError] = useState("");
+  const { execute: triggerRun, loading: triggering } = useApi(api.triggerPipelineRun);
+  
+  const { execute: fetchLatest, data: runsData } = useApi(api.getPipelineRuns, true);
+  
+  useEffect(() => {
+    fetchLatest(pipeline.id, { limit: 1 }).catch(() => {});
+  }, [fetchLatest, pipeline.id]);
 
-  const handleTrigger = (e) => {
+  const latestRun = runsData?.runs?.[0];
+  const status = latestRun ? latestRun.state : "idle";
+  const lastRunTime = latestRun?.startDate ? new Date(latestRun.startDate).toLocaleString() : "Never";
+
+  const handleTrigger = async (e) => {
     e.stopPropagation();
-    setTriggerState("running");
-    setTimeout(() => setTriggerState("idle"), 3000);
+    setTriggerError("");
+    try {
+      await triggerRun(pipeline.id, {});
+      await fetchLatest(pipeline.id, { limit: 1 });
+    } catch (err) {
+      setTriggerError(err?.message || "Failed to trigger pipeline run");
+    }
   };
 
   return (
@@ -138,40 +152,30 @@ function PipelineRow({ pipeline }) {
           <span style={{ color: "#3d4a5c", flexShrink: 0 }}><IconChevron open={expanded} /></span>
           <div style={{ minWidth: 0 }}>
             <div style={s.pipelineName}>{pipeline.name}</div>
-            <div style={s.pipelineSub}>{pipeline.source}</div>
+            <div style={s.pipelineSub}>{pipeline.source?.schema}.{pipeline.source?.table} → {pipeline.destination?.path}</div>
           </div>
         </div>
 
         <div style={s.pipelineMeta}>
-          <span style={s.metaTag}>{pipeline.mode}</span>
-          <span style={s.metaTag}>{pipeline.schedule}</span>
-          <StatusBadge status={pipeline.status} />
+          <span style={s.metaTag}>{pipeline.ingestion?.mode}</span>
+          <span style={s.metaTag}>{pipeline.schedule?.cron}</span>
+          <StatusBadge status={status} />
           <div style={{ fontSize: 11, color: "#59647a", display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
-            <IconClock />{pipeline.lastRun}
+            <IconClock />{lastRunTime}
           </div>
           <button
-            style={{ ...s.triggerBtn, ...(triggerState === "running" ? s.triggerBtnRunning : {}) }}
+            style={{ ...s.triggerBtn, ...(triggering ? s.triggerBtnRunning : {}) }}
             onClick={handleTrigger}
-            disabled={triggerState === "running"}
+            disabled={triggering}
           >
-            {triggerState === "running" ? <><div style={spinnerStyle} />Running</> : <><IconPlay />Trigger</>}
+            {triggering ? <><div style={spinnerStyle} />Running</> : <><IconPlay />Trigger</>}
           </button>
         </div>
       </div>
 
       {/* Run history */}
-      {expanded && (
-        <div style={s.runHistory} className="fade-in">
-          <div style={s.runHistoryHeader}>Run history</div>
-          <div style={s.runTableHead}>
-            <div style={{ flex: "0 0 200px", fontSize: 11, color: "#3d4a5c", fontWeight: 500, letterSpacing: "0.06em", textTransform: "uppercase" }}>Started</div>
-            <div style={{ flex: "0 0 80px", fontSize: 11, color: "#3d4a5c", fontWeight: 500, letterSpacing: "0.06em", textTransform: "uppercase" }}>Status</div>
-            <div style={{ flex: "0 0 80px", fontSize: 11, color: "#3d4a5c", fontWeight: 500, letterSpacing: "0.06em", textTransform: "uppercase" }}>Duration</div>
-            <div style={{ fontSize: 11, color: "#3d4a5c", fontWeight: 500, letterSpacing: "0.06em", textTransform: "uppercase" }}>Rows loaded</div>
-          </div>
-          {pipeline.runs.map(run => <RunRow key={run.id} run={run} />)}
-        </div>
-      )}
+      {triggerError && <div style={s.triggerError}>{triggerError}</div>}
+      {expanded && <RunHistory pipelineId={pipeline.id} />}
     </div>
   );
 }
@@ -181,9 +185,13 @@ export default function PipelinesPage() {
   const [filter, setFilter] = useState("all");
   const filters = ["all", "success", "running", "failed"];
 
-  const filtered = filter === "all"
-    ? MOCK_PIPELINES
-    : MOCK_PIPELINES.filter(p => p.status === filter);
+  const { execute: fetchPipelines, data: pipelinesData, loading, error } = useApi(api.getPipelines, true);
+
+  useEffect(() => {
+    fetchPipelines().catch(() => {});
+  }, [fetchPipelines]);
+
+  const pipelines = pipelinesData?.pipelines || [];
 
   return (
     <div style={s.page} className="fade-in">
@@ -201,9 +209,9 @@ export default function PipelinesPage() {
           <p style={s.pageDesc}>Monitor and manage your active ingestion pipelines orchestrated by Airflow.</p>
         </div>
         <div style={s.headerStats}>
-          <Stat label="Total" value={MOCK_PIPELINES.length} />
-          <Stat label="Running" value={MOCK_PIPELINES.filter(p => p.status === "running").length} color="#4a9eff" />
-          <Stat label="Failed" value={MOCK_PIPELINES.filter(p => p.status === "failed").length} color="#f07070" />
+          <Stat label="Total" value={pipelines.length} />
+          <Stat label="Running" value="—" color="#4a9eff" />
+          <Stat label="Failed" value="—" color="#f07070" />
         </div>
       </div>
 
@@ -219,16 +227,17 @@ export default function PipelinesPage() {
             </button>
           ))}
         </div>
-        <button style={s.refreshBtn}>
+        <button style={s.refreshBtn} onClick={() => fetchPipelines()}>
           <IconRefresh /> Refresh
         </button>
       </div>
 
       <div style={s.list}>
-        {filtered.length === 0
-          ? <div style={s.empty}>No pipelines match this filter.</div>
-          : filtered.map(p => <PipelineRow key={p.id} pipeline={p} />)
-        }
+        {loading && <div style={s.empty}>Loading pipelines...</div>}
+        {error && <div style={{...s.empty, color: '#f07070'}}>Error loading pipelines: {error}</div>}
+        {!loading && !error && pipelines.length === 0 && <div style={s.empty}>No pipelines found.</div>}
+        
+        {pipelines.map(p => <PipelineRow key={p.id} pipeline={p} />)}
       </div>
     </div>
   );
@@ -311,6 +320,12 @@ const s = {
   triggerBtnRunning: {
     background: "rgba(255,255,255,0.05)", borderColor: "rgba(255,255,255,0.10)",
     color: "#59647a", cursor: "not-allowed",
+  },
+  triggerError: {
+    borderTop: "1px solid rgba(255,255,255,0.06)",
+    padding: "10px 16px 0",
+    color: "#f07070",
+    fontSize: 12,
   },
   runHistory: { borderTop: "1px solid rgba(255,255,255,0.06)", padding: "0 16px 14px" },
   runHistoryHeader: {

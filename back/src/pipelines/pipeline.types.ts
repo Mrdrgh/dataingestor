@@ -26,6 +26,10 @@ export interface PipelineDag {
   filePath: string;
 }
 
+export interface PipelineSpark {
+  configPath: string;
+}
+
 export interface PipelineDefinition {
   id: string;
   name: string;
@@ -37,6 +41,7 @@ export interface PipelineDefinition {
   destination: PipelineDestination;
   schedule: PipelineSchedule;
   dag: PipelineDag;
+  spark?: PipelineSpark;
 }
 
 export interface PipelinesFile {

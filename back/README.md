@@ -17,9 +17,9 @@ APP_PORT=3001
 
 AIRFLOW_BASE_URL=http://localhost:8080
 AIRFLOW_DAG_ID=ingest_postgres_to_delta
-AIRFLOW_AUTH_TYPE=none
-AIRFLOW_USERNAME=
-AIRFLOW_PASSWORD=
+AIRFLOW_AUTH_TYPE=basic
+AIRFLOW_USERNAME=admin
+AIRFLOW_PASSWORD=admin
 AIRFLOW_TOKEN=
 AIRFLOW_TIMEOUT_MS=10000
 AIRFLOW_DAGS_DIR=../airflow/dags
@@ -37,12 +37,39 @@ DELTA_BASE_PATH=../delta
 
 `AIRFLOW_AUTH_TYPE` supports `none`, `basic`, or `bearer`.
 
+For local Airflow, the docker compose stack uses basic auth with `admin/admin`.
+
 #### Install and run
 
 ```
 cd back
 npm install
 npm run start:dev
+```
+
+#### Airflow + Spark (local docker compose)
+
+Run the Airflow stack (including a local Postgres source for ingestion):
+
+```
+cd airflow_spark_delta
+AIRFLOW_UID=$(id -u) AIRFLOW_GID=0 docker compose up -d
+```
+
+Notes:
+- Airflow UI: `http://localhost:8080` (basic auth `admin/admin`).
+- The compose stack includes `postgres-source` on `localhost:5432` for backend discovery.
+- Airflow tasks read source DB settings from `SOURCE_PG*` env vars inside the Airflow containers.
+- If `5432` is already taken, set `SOURCE_PG_HOST_PORT=5433` before running compose and update `PGPORT=5433` in the backend `.env`.
+
+The Airflow compose file sets these by default:
+
+```
+SOURCE_PGHOST=postgres-source
+SOURCE_PGPORT=5432
+SOURCE_PGDATABASE=example_db
+SOURCE_PGUSER=postgres
+SOURCE_PGPASSWORD=postgres
 ```
 
 #### API reference (detailed)

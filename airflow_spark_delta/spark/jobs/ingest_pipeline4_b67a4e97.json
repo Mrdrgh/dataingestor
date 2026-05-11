@@ -1,0 +1,19 @@
+{
+  "pipelineId": "b67a4e97-183f-45c3-8eef-7deb8b2171e7",
+  "dagId": "ingest_pipeline4_b67a4e97",
+  "source": {
+    "schema": "public",
+    "table": "forge_users",
+    "columns": []
+  },
+  "ingestion": {
+    "mode": "full"
+  },
+  "destination": {
+    "path": "../airflow_spark_delta/delta/fusion_catalog/test_schema/forge_users",
+    "mode": "overwrite"
+  },
+  "schedule": {
+    "cron": "0 * * * *"
+  }
+}

@@ -30,6 +30,13 @@ const IconCatalog = () => (
   </svg>
 );
 
+const IconAdmin = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+    <circle cx="12" cy="12" r="3" />
+    <path d="M19.4 15a1.8 1.8 0 0 0 .36 2l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.8 1.8 0 0 0-2-.36 1.8 1.8 0 0 0-1 1.64V21a2 2 0 1 1-4 0v-.08a1.8 1.8 0 0 0-1-1.64 1.8 1.8 0 0 0-2 .36l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.8 1.8 0 0 0 .36-2 1.8 1.8 0 0 0-1.64-1H3a2 2 0 1 1 0-4h.08a1.8 1.8 0 0 0 1.64-1 1.8 1.8 0 0 0-.36-2l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.8 1.8 0 0 0 2 .36h0A1.8 1.8 0 0 0 10 3.08V3a2 2 0 1 1 4 0v.08a1.8 1.8 0 0 0 1 1.64h0a1.8 1.8 0 0 0 2-.36l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.8 1.8 0 0 0-.36 2v0a1.8 1.8 0 0 0 1.64 1H21a2 2 0 1 1 0 4h-.08a1.8 1.8 0 0 0-1.52 1z" />
+  </svg>
+);
+
 const IconLogo = () => (
   <svg width="20" height="20" viewBox="0 0 32 32" fill="none">
     <rect width="32" height="32" rx="6" fill="#1e6ef4"/>
@@ -51,6 +58,12 @@ const navItems = [
       { id: "data-ingestion", label: "Data Ingestion", icon: <IconIngestion /> },
       { id: "pipelines", label: "Pipelines", icon: <IconPipelines /> },
       { id: "catalog", label: "Catalog", icon: <IconCatalog /> },
+    ],
+  },
+  {
+    section: "OPERATIONS",
+    items: [
+      { id: "admin", label: "API Console", icon: <IconAdmin /> },
     ],
   },
 ];

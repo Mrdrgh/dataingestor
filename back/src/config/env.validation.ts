@@ -24,15 +24,21 @@ export const envValidationSchema = Joi.object({
     otherwise: Joi.string().optional(),
   }),
   AIRFLOW_TIMEOUT_MS: Joi.number().default(10000),
-  AIRFLOW_DAGS_DIR: Joi.string().default('../airflow/dags'),
+  AIRFLOW_DAGS_DIR: Joi.string().default('../airflow/dags/generated'),
+  AIRFLOW_SPARK_JOBS_DIR: Joi.string().default('../airflow_spark_delta/spark/jobs'),
 
   PGHOST: Joi.string().required(),
   PGPORT: Joi.number().default(5432),
   PGDATABASE: Joi.string().required(),
   PGUSER: Joi.string().required(),
   PGPASSWORD: Joi.string().required(),
+  SOURCE_PGHOST: Joi.string().optional(),
+  SOURCE_PGPORT: Joi.number().optional(),
+  SOURCE_PGDATABASE: Joi.string().optional(),
+  SOURCE_PGUSER: Joi.string().optional(),
+  SOURCE_PGPASSWORD: Joi.string().optional(),
 
   PIPELINES_FILE: Joi.string().default('./data/pipelines.json'),
   PREVIEW_ROW_LIMIT: Joi.number().default(20),
-  DELTA_BASE_PATH: Joi.string().default('../delta'),
+  DELTA_BASE_PATH: Joi.string().default('../airflow_spark_delta/delta'),
 });

@@ -26,11 +26,21 @@ export class PostgresMetadataService implements OnModuleDestroy {
 
   constructor(private readonly config: ConfigService) {
     this.pool = new Pool({
-      host: this.config.getOrThrow<string>('PGHOST'),
-      port: this.config.get<number>('PGPORT', 5432),
-      database: this.config.getOrThrow<string>('PGDATABASE'),
-      user: this.config.getOrThrow<string>('PGUSER'),
-      password: this.config.getOrThrow<string>('PGPASSWORD'),
+      host:
+        this.config.get<string>('SOURCE_PGHOST') ??
+        this.config.getOrThrow<string>('PGHOST'),
+      port:
+        this.config.get<number>('SOURCE_PGPORT') ??
+        this.config.get<number>('PGPORT', 5432),
+      database:
+        this.config.get<string>('SOURCE_PGDATABASE') ??
+        this.config.getOrThrow<string>('PGDATABASE'),
+      user:
+        this.config.get<string>('SOURCE_PGUSER') ??
+        this.config.getOrThrow<string>('PGUSER'),
+      password:
+        this.config.get<string>('SOURCE_PGPASSWORD') ??
+        this.config.getOrThrow<string>('PGPASSWORD'),
     });
 
     this.previewLimit = this.config.get<number>('PREVIEW_ROW_LIMIT', 20);

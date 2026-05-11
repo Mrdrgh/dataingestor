@@ -1,4 +1,6 @@
 import { useState, useEffect } from "react";
+import { api } from "../api/endpoints";
+import { useApi } from "../hooks/useApi";
 
 const STEPS = [
   { id: 1, label: "Connection" },
@@ -333,7 +335,7 @@ function IngestionStep({ form, setForm, onNext, onBack }) {
         <div style={wizardStyles.subsectionTitle}>Ingestion mode</div>
         {[
           {
-            value: "full_refresh",
+            value: "full",
             label: "Full refresh",
             desc: "Truncate the destination table and reload all data on every run. Suitable for small, frequently-changing tables.",
           },
@@ -341,11 +343,6 @@ function IngestionStep({ form, setForm, onNext, onBack }) {
             value: "incremental",
             label: "Incremental (CDC)",
             desc: "Capture only new and changed rows using a watermark column. Requires a monotonically increasing column.",
-          },
-          {
-            value: "snapshot_merge",
-            label: "Snapshot and merge",
-            desc: "Load a full snapshot and merge it into the existing Delta table using a primary key. Handles deletes.",
           },
         ].map((opt) => (
           <label
@@ -592,9 +589,11 @@ function ScheduleStep({ form, setForm, onSubmit, onBack, submitting, submitted }
 export default function PostgresWizard({ onBack }) {
   const [step, setStep] = useState(1);
   const [testState, setTestState] = useState("idle");
-  const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [errors, setErrors] = useState({});
+
+  const { execute: testConnection, loading: testingApi } = useApi(api.saveConnection);
+  const { execute: createPipeline, loading: submittingApi } = useApi(api.createPipeline);
 
   const [form, setForm] = useState({
     host: "",
@@ -603,7 +602,7 @@ export default function PostgresWizard({ onBack }) {
     username: "",
     password: "",
     pipelineName: "",
-    mode: "full_refresh",
+    mode: "full",
     schema: "public",
     table: "",
     watermark: "",
@@ -626,21 +625,60 @@ export default function PostgresWizard({ onBack }) {
     return Object.keys(e).length === 0;
   };
 
-  const handleTest = () => {
+  const handleTest = async () => {
     if (!validate()) return;
     setTestState("loading");
-    setTimeout(() => {
-      setTestState(form.host === "fail" ? "error" : "success");
-    }, 2000);
+    try {
+      await testConnection({
+        host: form.host,
+        port: parseInt(form.port, 10),
+        database: form.database,
+        user: form.username,
+        password: form.password,
+        trustServerCertificate: true,
+      });
+      setTestState("success");
+    } catch (err) {
+      setTestState("error");
+    }
   };
 
-  const handleSubmit = () => {
-    setSubmitting(true);
-    setTimeout(() => {
-      setSubmitting(false);
+  const handleSubmit = async () => {
+    try {
+      if (!form.table.trim()) {
+        alert("Source table is required.");
+        return;
+      }
+      if (form.mode === "incremental" && !form.watermark.trim()) {
+        alert("Watermark column is required for incremental mode.");
+        return;
+      }
+
+      const payload = {
+        name: form.pipelineName || `${form.database}_ingestion`,
+        description: "",
+        source: {
+          schema: form.schema || "public",
+          table: form.table,
+          columns: []
+        },
+        ingestion: {
+          mode: form.mode,
+          watermarkColumn: form.mode === "incremental" ? form.watermark : undefined
+        },
+        destination: {
+          path: `../airflow_spark_delta/delta/${form.catalog}/${form.destSchema}/${form.destTable || form.table}`,
+          mode: form.mode === "full" ? "overwrite" : "append"
+        },
+        schedule: {
+          cron: form.schedule === "manual" ? null : (form.schedule === "custom" ? form.cron : (form.schedule === "hourly" ? "0 * * * *" : "0 0 * * *"))
+        }
+      };
+      await createPipeline(payload);
       setSubmitted(true);
-      console.log("[Fusion Platform] POST /api/v1/pipelines", JSON.stringify(form, null, 2));
-    }, 2000);
+    } catch (err) {
+      alert("Failed to create pipeline: " + err.message);
+    }
   };
 
   return (
@@ -703,7 +741,7 @@ export default function PostgresWizard({ onBack }) {
               setForm={setForm}
               onSubmit={handleSubmit}
               onBack={() => setStep(4)}
-              submitting={submitting}
+              submitting={submittingApi}
               submitted={submitted}
             />
           )}

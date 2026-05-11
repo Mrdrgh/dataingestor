@@ -1,3 +1,172 @@
 {
-  "pipelines": []
+  "pipelines": [
+    {
+      "id": "59d86923-ad81-4d5c-a80c-5e589c9e3458",
+      "name": "test_ingestion",
+      "description": null,
+      "createdAt": "2026-05-08T14:46:57.184Z",
+      "updatedAt": "2026-05-08T14:46:57.184Z",
+      "source": {
+        "schema": "public",
+        "table": "achraf_data",
+        "columns": []
+      },
+      "ingestion": {
+        "mode": "incremental",
+        "watermarkColumn": "id"
+      },
+      "destination": {
+        "path": "../delta/fusion_catalog/raw/achraf_data",
+        "mode": "append"
+      },
+      "schedule": {
+        "cron": null
+      },
+      "dag": {
+        "dagId": "ingest_test_ingestion_59d86923",
+        "filePath": "../airflow/dags/ingest_test_ingestion_59d86923.py"
+      }
+    },
+    {
+      "id": "2ad841d5-8305-43ee-8188-6996916f5ec6",
+      "name": "fusion_forge_db_ingestion",
+      "description": null,
+      "createdAt": "2026-05-08T15:01:01.426Z",
+      "updatedAt": "2026-05-08T15:01:01.426Z",
+      "source": {
+        "schema": "public",
+        "table": "forge_users",
+        "columns": []
+      },
+      "ingestion": {
+        "mode": "incremental",
+        "watermarkColumn": "id"
+      },
+      "destination": {
+        "path": "../delta/fusion_catalog/raw/forge_users",
+        "mode": "append"
+      },
+      "schedule": {
+        "cron": "0 * * * *"
+      },
+      "dag": {
+        "dagId": "ingest_fusion_forge_db_ingestion_2ad841d5",
+        "filePath": "../airflow/dags/ingest_fusion_forge_db_ingestion_2ad841d5.py"
+      }
+    },
+    {
+      "id": "ec4a3a0f-9948-45ad-9cf7-8dbb481b054e",
+      "name": "pipeline2",
+      "description": null,
+      "createdAt": "2026-05-08T15:46:30.405Z",
+      "updatedAt": "2026-05-08T15:46:30.405Z",
+      "source": {
+        "schema": "public",
+        "table": "forge_users",
+        "columns": []
+      },
+      "ingestion": {
+        "mode": "incremental",
+        "watermarkColumn": "id"
+      },
+      "destination": {
+        "path": "../delta/fusion_catalog/raw/forge_users",
+        "mode": "append"
+      },
+      "schedule": {
+        "cron": "0 * * * *"
+      },
+      "dag": {
+        "dagId": "ingest_pipeline2_ec4a3a0f",
+        "filePath": "../airflow/dags/ingest_pipeline2_ec4a3a0f.py"
+      }
+    },
+    {
+      "id": "15709f53-6b77-4e00-8694-59d1ded00be8",
+      "name": "pipeline3",
+      "description": null,
+      "createdAt": "2026-05-08T16:13:34.529Z",
+      "updatedAt": "2026-05-08T16:13:34.529Z",
+      "source": {
+        "schema": "public",
+        "table": "forge_users",
+        "columns": []
+      },
+      "ingestion": {
+        "mode": "full"
+      },
+      "destination": {
+        "path": "../airflow_spark_delta/delta/fusion_catalog/raw/forge_users",
+        "mode": "overwrite"
+      },
+      "schedule": {
+        "cron": "0 * * * *"
+      },
+      "dag": {
+        "dagId": "ingest_pipeline3_15709f53",
+        "filePath": "../airflow/dags/ingest_pipeline3_15709f53.py"
+      },
+      "spark": {
+        "configPath": "../airflow_spark_delta/spark/jobs/ingest_pipeline3_15709f53.json"
+      }
+    },
+    {
+      "id": "b67a4e97-183f-45c3-8eef-7deb8b2171e7",
+      "name": "pipeline4",
+      "description": null,
+      "createdAt": "2026-05-08T16:46:30.994Z",
+      "updatedAt": "2026-05-08T16:46:30.994Z",
+      "source": {
+        "schema": "public",
+        "table": "forge_users",
+        "columns": []
+      },
+      "ingestion": {
+        "mode": "full"
+      },
+      "destination": {
+        "path": "../airflow_spark_delta/delta/fusion_catalog/test_schema/forge_users",
+        "mode": "overwrite"
+      },
+      "schedule": {
+        "cron": "0 * * * *"
+      },
+      "dag": {
+        "dagId": "ingest_pipeline4_b67a4e97",
+        "filePath": "../airflow/dags/ingest_pipeline4_b67a4e97.py"
+      },
+      "spark": {
+        "configPath": "../airflow_spark_delta/spark/jobs/ingest_pipeline4_b67a4e97.json"
+      }
+    },
+    {
+      "id": "5aa6b23d-5477-4539-9692-dd9d6b2025af",
+      "name": "pipeline5",
+      "description": null,
+      "createdAt": "2026-05-08T16:57:21.735Z",
+      "updatedAt": "2026-05-08T16:57:21.735Z",
+      "source": {
+        "schema": "public",
+        "table": "forge_users",
+        "columns": []
+      },
+      "ingestion": {
+        "mode": "full"
+      },
+      "destination": {
+        "path": "../airflow_spark_delta/delta/fusion_catalog/bronze/forge_users",
+        "mode": "overwrite"
+      },
+      "schedule": {
+        "cron": "0 * * * *"
+      },
+      "dag": {
+        "dagId": "ingest_pipeline5_5aa6b23d",
+        "filePath": "../airflow/dags/ingest_pipeline5_5aa6b23d.py"
+      },
+      "spark": {
+        "configPath": "../airflow_spark_delta/spark/jobs/ingest_pipeline5_5aa6b23d.json"
+      }
+    }
+  ]
 }

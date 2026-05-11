@@ -86,14 +86,31 @@ export class AirflowService {
     conf?: Record<string, unknown>,
   ): Promise<Record<string, unknown>> {
     const targetDagId = this.resolveDagId(dagId);
-    return this.request<Record<string, unknown>>({
-      method: 'POST',
-      url: `/api/v1/dags/${targetDagId}/dagRuns`,
-      data: {
-        dag_run_id: dagRunId,
-        conf: conf ?? {},
-      },
-    });
+    const maxAttempts = 15;
+    let lastError: unknown;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        return await this.request<Record<string, unknown>>({
+          method: 'POST',
+          url: `/api/v1/dags/${targetDagId}/dagRuns`,
+          data: {
+            dag_run_id: dagRunId,
+            conf: conf ?? {},
+          },
+        });
+      } catch (error) {
+        lastError = error;
+        if (error instanceof HttpException && error.getStatus() === 404) {
+          if (attempt < maxAttempts) {
+            await this.delay(2000);
+            continue;
+          }
+        }
+        throw error;
+      }
+    }
+    throw lastError;
   }
 
   async listTaskInstances(

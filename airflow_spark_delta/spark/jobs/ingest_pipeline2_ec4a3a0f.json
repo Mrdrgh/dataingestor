@@ -1,0 +1,20 @@
+{
+  "pipelineId": "ec4a3a0f-9948-45ad-9cf7-8dbb481b054e",
+  "dagId": "ingest_pipeline2_ec4a3a0f",
+  "source": {
+    "schema": "public",
+    "table": "forge_users",
+    "columns": []
+  },
+  "ingestion": {
+    "mode": "incremental",
+    "watermarkColumn": "id"
+  },
+  "destination": {
+    "path": "../airflow_spark_delta/delta/fusion_catalog/raw/forge_users",
+    "mode": "append"
+  },
+  "schedule": {
+    "cron": "0 * * * *"
+  }
+}

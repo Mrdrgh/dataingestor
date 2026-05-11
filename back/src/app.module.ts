@@ -11,6 +11,7 @@ import { LogsModule } from './logs/logs.module';
 import { DatabaseModule } from './database/database.module';
 import { SourcesModule } from './sources/sources.module';
 import { PipelinesModule } from './pipelines/pipelines.module';
+import { CatalogModule } from './catalog/catalog.module';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { PipelinesModule } from './pipelines/pipelines.module';
     AlertsModule,
     HealthModule,
     LogsModule,
+    CatalogModule,
   ],
 })
 export class AppModule {}
