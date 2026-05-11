@@ -41,4 +41,10 @@ export const envValidationSchema = Joi.object({
   PIPELINES_FILE: Joi.string().default('./data/pipelines.json'),
   PREVIEW_ROW_LIMIT: Joi.number().default(20),
   DELTA_BASE_PATH: Joi.string().default('../airflow_spark_delta/delta'),
+
+  NB_PGHOST: Joi.string().default('localhost'),
+  NB_PGPORT: Joi.number().default(5434),
+  NB_PGDATABASE: Joi.string().default('notebooks_db'),
+  NB_PGUSER: Joi.string().default('notebooks'),
+  NB_PGPASSWORD: Joi.string().default('notebooks'),
 });

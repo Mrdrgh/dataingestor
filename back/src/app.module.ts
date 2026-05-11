@@ -12,6 +12,10 @@ import { DatabaseModule } from './database/database.module';
 import { SourcesModule } from './sources/sources.module';
 import { PipelinesModule } from './pipelines/pipelines.module';
 import { CatalogModule } from './catalog/catalog.module';
+import { NotebookDatabaseModule } from './notebook-database/notebook-database.module';
+import { ComputeProfileModule } from './compute-profiles/compute-profile.module';
+import { NotebookModule } from './notebooks/notebook.module';
+import { ExecutionModule } from './execution/execution.module';
 
 @Module({
   imports: [
@@ -31,6 +35,12 @@ import { CatalogModule } from './catalog/catalog.module';
     HealthModule,
     LogsModule,
     CatalogModule,
+    // Notebook feature modules
+    NotebookDatabaseModule,
+    ComputeProfileModule,
+    NotebookModule,
+    ExecutionModule,
   ],
 })
 export class AppModule {}
+

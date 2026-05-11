@@ -95,6 +95,38 @@ services:
       airflow-init:
         condition: service_completed_successfully
 
+  postgres-notebooks:
+    image: postgres:15
+    environment:
+      - POSTGRES_USER=notebooks
+      - POSTGRES_PASSWORD=notebooks
+      - POSTGRES_DB=notebooks_db
+    ports:
+      - "5434:5432"
+    volumes:
+      - postgres-notebooks-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "notebooks"]
+      interval: 10s
+      retries: 5
+      start_period: 5s
+
+  jupyter-kernel-gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile.kernel-gateway
+    ports:
+      - "8888:8888"
+    environment:
+      - KG_ALLOW_ORIGIN=*
+      - KG_LIST_KERNELS=True
+    volumes:
+      - ./delta:/opt/spark/delta
+    depends_on:
+      postgres-notebooks:
+        condition: service_healthy
+
 volumes:
   airflow-logs:
   postgres-source-data:
+  postgres-notebooks-data:
