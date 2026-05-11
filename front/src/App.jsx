@@ -5,9 +5,13 @@ import DataIngestionPage from "./pages/DataIngestionPage";
 import PipelinesPage from "./pages/PipelinesPage";
 import CatalogPage from "./pages/CatalogPage";
 import AdminPage from "./pages/AdminPage";
+// FIX: We must import these two so the switch statement doesn't crash!
+import NotebooksPage from "./pages/NotebooksPage"; 
+import ComputeProfilesPage from "./pages/ComputeProfilesPage"; 
 import "./styles/global.css";
 
 export default function App() {
+  // Your exact state logic
   const [activePage, setActivePage] = useState("home");
 
   const renderPage = () => {
@@ -20,6 +24,10 @@ export default function App() {
         return <PipelinesPage />;
       case "catalog":
         return <CatalogPage />;
+      case "notebooks":        
+        return <NotebooksPage />;
+      case "compute-profiles": 
+        return <ComputeProfilesPage />;
       case "admin":
         return <AdminPage />;
       default:

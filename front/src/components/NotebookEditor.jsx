@@ -1,0 +1,234 @@
+import { useState, useRef, useCallback } from "react";
+
+const WS_URL = "ws://localhost:3001/ws/notebook";
+const API_URL = "http://localhost:3001";
+
+const IconPlay = () => (<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>);
+const IconStop = () => (<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>);
+const IconRestart = () => (<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>);
+const IconPlus = () => (<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>);
+const IconTrash = () => (<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>);
+const IconCode = () => (<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>);
+const IconMd = () => (<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>);
+const IconArrowUp = () => (<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>);
+const IconArrowDown = () => (<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg>);
+const IconBack = () => (<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 18 9 12 15 6"/></svg>);
+const IconSave = () => (<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>);
+
+let _id = 0;
+const newId = () => `cell-${Date.now()}-${_id++}`;
+const makeCell = (type = "code", source = "") => ({ id: newId(), type, source, outputs: [], execution_count: null, metadata: {} });
+
+function CellOutput({ outputs, running }) {
+  if (running) return (
+    <div style={s.outputWrap}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <div style={spin} /><span style={{ fontSize: 11, color: "#59647a" }}>Running…</span>
+      </div>
+    </div>
+  );
+  if (!outputs?.length) return null;
+  return (
+    <div style={s.outputWrap}>
+      {outputs.map((out, i) => {
+        if (out.output_type === "stream") return <pre key={i} style={{ ...s.pre, color: out.name === "stderr" ? "#f07070" : "#c8d4e8" }}>{out.text}</pre>;
+        if (out.output_type === "execute_result" || out.output_type === "display_data") {
+          if (out.data?.["text/html"]) return <div key={i} style={s.outputHtml} dangerouslySetInnerHTML={{ __html: out.data["text/html"] }} />;
+          if (out.data?.["text/plain"]) return <pre key={i} style={s.pre}>{out.data["text/plain"]}</pre>;
+        }
+        if (out.output_type === "error") return <pre key={i} style={{ ...s.pre, color: "#f07070" }}>{out.ename}: {out.evalue}{"\n"}{(out.traceback || []).join("\n")}</pre>;
+        return null;
+      })}
+    </div>
+  );
+}
+
+function Cell({ cell, index, total, selected, kernelStatus, onSelect, onUpdate, onDelete, onMoveUp, onMoveDown, onExecute }) {
+  const taRef = useRef(null);
+  const running = cell.metadata?.running === true;
+  const canRun = kernelStatus === "ready" || kernelStatus === "idle";
+
+  const autoResize = () => { const t = taRef.current; if (t) { t.style.height = "auto"; t.style.height = t.scrollHeight + "px"; } };
+
+  return (
+    <div style={{ ...s.cell, ...(selected ? s.cellSel : {}) }} onClick={() => onSelect(cell.id)}>
+      <div style={s.cellBar}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={s.execCount}>{running ? "*" : cell.execution_count != null ? `[${cell.execution_count}]` : "[ ]"}</span>
+          <button style={{ ...s.cellTypeBtn, color: cell.type === "code" ? "#4a9eff" : "#b07ff0" }}
+            onClick={e => { e.stopPropagation(); onUpdate(cell.id, { type: cell.type === "code" ? "markdown" : "code" }); }}>
+            {cell.type === "code" ? <IconCode /> : <IconMd />}
+            <span style={{ fontSize: 10 }}>{cell.type}</span>
+          </button>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
+          {cell.type === "code" && (
+            <button style={{ ...s.cellBtn, color: running ? "#f07070" : canRun ? "#2ec995" : "#3d4a5c" }}
+              onClick={e => { e.stopPropagation(); onExecute(cell.id); }} disabled={!canRun && !running}>
+              {running ? <IconStop /> : <IconPlay />}
+            </button>
+          )}
+          <button style={s.cellBtn} onClick={e => { e.stopPropagation(); onMoveUp(cell.id); }} disabled={index === 0}><IconArrowUp /></button>
+          <button style={s.cellBtn} onClick={e => { e.stopPropagation(); onMoveDown(cell.id); }} disabled={index === total - 1}><IconArrowDown /></button>
+          <button style={{ ...s.cellBtn, color: "#f07070" }} onClick={e => { e.stopPropagation(); onDelete(cell.id); }}><IconTrash /></button>
+        </div>
+      </div>
+      <textarea ref={taRef} value={cell.source}
+        onChange={e => { onUpdate(cell.id, { source: e.target.value }); autoResize(); }}
+        onKeyDown={e => { if (e.key === "Enter" && (e.ctrlKey || e.shiftKey)) { e.preventDefault(); onExecute(cell.id); } }}
+        onFocus={() => onSelect(cell.id)}
+        style={{ ...s.ta, fontFamily: cell.type === "code" ? "'IBM Plex Mono', monospace" : "'IBM Plex Sans', sans-serif" }}
+        placeholder={cell.type === "code" ? "# PySpark code… (Shift+Enter to run)" : "Markdown…"}
+        spellCheck={false}
+        rows={Math.max(3, cell.source.split("\n").length)}
+      />
+      <CellOutput outputs={cell.outputs} running={running} />
+    </div>
+  );
+}
+
+export default function NotebookEditor({ notebook, computeProfiles, onBack, onSave }) {
+  const [cells, setCells] = useState(notebook.cells?.length > 0 ? notebook.cells : [makeCell("code", "# Welcome\nprint('Hello, Spark!')")]);
+  const [title, setTitle] = useState(notebook.title || "Untitled Notebook");
+  const [selected, setSelected] = useState(null);
+  const [profileId, setProfileId] = useState(notebook.compute_profile_id || "");
+  const [kernelStatus, setKernelStatus] = useState("disconnected");
+  const [saving, setSaving] = useState(false);
+  const [saveMsg, setSaveMsg] = useState("");
+  const wsRef = useRef(null);
+
+  const connectKernel = useCallback(() => {
+    if (wsRef.current) wsRef.current.close();
+    setKernelStatus("connecting");
+    const ws = new WebSocket(WS_URL);
+    wsRef.current = ws;
+    ws.onopen = () => ws.send(JSON.stringify({ type: "kernel:start", notebook_id: notebook.id, compute_profile_id: profileId }));
+    ws.onmessage = (e) => {
+      const msg = JSON.parse(e.data);
+      if (msg.type === "kernel:ready") setKernelStatus("idle");
+      if (msg.type === "kernel:error") setKernelStatus("dead");
+      if (msg.type === "kernel:status") setKernelStatus(msg.status);
+      if (msg.type === "cell:status") setCells(p => p.map(c => c.id === msg.cell_id ? { ...c, metadata: { ...c.metadata, running: msg.status === "busy" } } : c));
+      if (msg.type === "cell:stream") setCells(p => p.map(c => {
+        if (c.id !== msg.cell_id) return c;
+        const ex = c.outputs.find(o => o.output_type === "stream" && o.name === msg.name);
+        if (ex) return { ...c, outputs: c.outputs.map(o => o === ex ? { ...o, text: o.text + msg.text } : o) };
+        return { ...c, outputs: [...c.outputs, { output_type: "stream", name: msg.name, text: msg.text }] };
+      }));
+      if (msg.type === "cell:result") setCells(p => p.map(c => c.id === msg.cell_id ? { ...c, execution_count: msg.execution_count, outputs: [...c.outputs, { output_type: "execute_result", data: msg.data }] } : c));
+      if (msg.type === "cell:error") setCells(p => p.map(c => c.id === msg.cell_id ? { ...c, metadata: { ...c.metadata, running: false }, outputs: [...c.outputs, { output_type: "error", ename: msg.ename, evalue: msg.evalue, traceback: msg.traceback }] } : c));
+      if (msg.type === "cell:display_data") setCells(p => p.map(c => c.id === msg.cell_id ? { ...c, outputs: [...c.outputs, { output_type: "display_data", data: msg.data }] } : c));
+    };
+    ws.onerror = () => setKernelStatus("dead");
+    ws.onclose = () => setKernelStatus(k => k !== "dead" ? "disconnected" : k);
+  }, [notebook.id, profileId]);
+
+  const send = (msg) => { if (wsRef.current?.readyState === WebSocket.OPEN) wsRef.current.send(JSON.stringify(msg)); };
+
+  const executeCell = (cellId) => {
+    const cell = cells.find(c => c.id === cellId);
+    if (!cell || cell.type !== "code") return;
+    setCells(p => p.map(c => c.id === cellId ? { ...c, outputs: [], metadata: { ...c.metadata, running: true } } : c));
+    send({ type: "cell:execute", notebook_id: notebook.id, cell_id: cellId, code: cell.source });
+  };
+
+  const addCell = (type = "code") => {
+    const cell = makeCell(type);
+    setCells(p => {
+      if (!selected) return [...p, cell];
+      const i = p.findIndex(c => c.id === selected);
+      const n = [...p]; n.splice(i + 1, 0, cell); return n;
+    });
+    setSelected(cell.id);
+  };
+
+  const updateCell = (id, patch) => setCells(p => p.map(c => c.id === id ? { ...c, ...patch } : c));
+  const deleteCell = (id) => setCells(p => { const n = p.filter(c => c.id !== id); return n.length ? n : [makeCell("code")]; });
+  const moveCell = (id, dir) => setCells(p => {
+    const i = p.findIndex(c => c.id === id); const n = [...p];
+    const t = dir === "up" ? i - 1 : i + 1;
+    if (t < 0 || t >= n.length) return p;
+    [n[i], n[t]] = [n[t], n[i]]; return n;
+  });
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await fetch(`${API_URL}/notebooks/${notebook.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title, cells, compute_profile_id: profileId }) });
+      setSaveMsg("Saved ✓"); onSave?.({ ...notebook, title, cells, compute_profile_id: profileId });
+    } catch { setSaveMsg("Failed"); }
+    setSaving(false); setTimeout(() => setSaveMsg(""), 2000);
+  };
+
+  const kColor = { disconnected: "#3d4a5c", connecting: "#f0a347", idle: "#2ec995", ready: "#2ec995", busy: "#4a9eff", dead: "#f07070" }[kernelStatus] || "#3d4a5c";
+
+  return (
+    <div style={s.page}>
+      <div style={s.topBar}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+          <button style={s.backBtn} onClick={onBack}><IconBack /> Notebooks</button>
+          <span style={{ color: "#3d4a5c" }}>/</span>
+          <input value={title} onChange={e => setTitle(e.target.value)} style={s.titleInput} />
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+          <select value={profileId} onChange={e => setProfileId(e.target.value)} style={s.profileSelect}>
+            <option value="">Select compute profile…</option>
+            {computeProfiles.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+          <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+            <span style={{ width: 7, height: 7, borderRadius: "50%", background: kColor, display: "inline-block" }} />
+            <span style={{ fontSize: 11, color: kColor }}>{kernelStatus}</span>
+          </div>
+          <button style={{ ...s.btn, background: "rgba(30,110,244,0.10)", borderColor: "rgba(30,110,244,0.25)", color: "#4a9eff" }}
+            onClick={connectKernel} disabled={kernelStatus === "connecting" || !profileId}>
+            {kernelStatus === "connecting" ? <><div style={spin} />Connecting…</> : "Connect kernel"}
+          </button>
+          <div style={s.divider} />
+          <button style={{ ...s.btn, color: "#2ec995" }} onClick={() => cells.filter(c => c.type === "code").forEach(c => executeCell(c.id))}><IconPlay /> Run all</button>
+          <button style={s.btn} onClick={() => send({ type: "kernel:restart", notebook_id: notebook.id })}><IconRestart /></button>
+          <button style={s.btn} onClick={() => setCells(p => p.map(c => ({ ...c, outputs: [], execution_count: null, metadata: {} })))}>Clear</button>
+          <div style={s.divider} />
+          <button style={{ ...s.btn, background: "rgba(46,201,149,0.10)", borderColor: "rgba(46,201,149,0.25)", color: "#2ec995" }} onClick={handleSave} disabled={saving}>
+            <IconSave /> {saving ? "Saving…" : saveMsg || "Save"}
+          </button>
+        </div>
+      </div>
+
+      <div style={s.cells}>
+        {cells.map((cell, i) => (
+          <Cell key={cell.id} cell={cell} index={i} total={cells.length} selected={selected === cell.id}
+            kernelStatus={kernelStatus} onSelect={setSelected} onUpdate={updateCell}
+            onDelete={deleteCell} onMoveUp={id => moveCell(id, "up")} onMoveDown={id => moveCell(id, "down")} onExecute={executeCell} />
+        ))}
+        <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+          <button style={s.addBtn} onClick={() => addCell("code")}><IconPlus /> Code cell</button>
+          <button style={s.addBtn} onClick={() => addCell("markdown")}><IconPlus /> Markdown cell</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const spin = { width: 10, height: 10, borderRadius: "50%", border: "2px solid rgba(255,255,255,0.2)", borderTopColor: "#fff", animation: "spin 0.7s linear infinite", flexShrink: 0, display: "inline-block" };
+
+const s = {
+  page: { display: "flex", flexDirection: "column", height: "100vh", overflow: "hidden", background: "#0d1117" },
+  topBar: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 20px", height: 52, borderBottom: "1px solid rgba(255,255,255,0.07)", flexShrink: 0, gap: 12 },
+  backBtn: { display: "inline-flex", alignItems: "center", gap: 5, background: "none", border: "none", color: "#8b97b0", fontSize: 12, cursor: "pointer", fontFamily: "'IBM Plex Sans', sans-serif" },
+  titleInput: { background: "none", border: "none", outline: "none", fontSize: 14, fontWeight: 600, color: "#e2e8f0", fontFamily: "'IBM Plex Sans', sans-serif", minWidth: 180 },
+  profileSelect: { background: "#13181f", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 6, color: "#8b97b0", fontSize: 12, padding: "4px 8px", outline: "none", fontFamily: "'IBM Plex Sans', sans-serif", maxWidth: 180 },
+  btn: { display: "inline-flex", alignItems: "center", gap: 5, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 6, padding: "4px 10px", fontSize: 12, color: "#8b97b0", cursor: "pointer", fontFamily: "'IBM Plex Sans', sans-serif", whiteSpace: "nowrap" },
+  divider: { width: 1, height: 18, background: "rgba(255,255,255,0.07)" },
+  cells: { flex: 1, overflowY: "auto", padding: "24px 40px 60px" },
+  cell: { border: "1px solid rgba(255,255,255,0.06)", borderRadius: 8, marginBottom: 12, background: "#13181f" },
+  cellSel: { borderColor: "rgba(30,110,244,0.35)" },
+  cellBar: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "6px 10px", borderBottom: "1px solid rgba(255,255,255,0.05)" },
+  execCount: { fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, color: "#3d4a5c", width: 28, textAlign: "right" },
+  cellTypeBtn: { display: "inline-flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", fontSize: 11, padding: "2px 6px", fontFamily: "'IBM Plex Sans', sans-serif" },
+  cellBtn: { display: "inline-flex", alignItems: "center", justifyContent: "center", background: "none", border: "none", cursor: "pointer", color: "#3d4a5c", padding: "4px 6px", borderRadius: 4 },
+  ta: { width: "100%", background: "transparent", border: "none", outline: "none", resize: "none", padding: "12px 14px", fontSize: 13, lineHeight: 1.7, color: "#e2e8f0", boxSizing: "border-box", minHeight: 60 },
+  outputWrap: { borderTop: "1px solid rgba(255,255,255,0.05)", padding: "8px 14px 10px" },
+  pre: { margin: 0, fontFamily: "'IBM Plex Mono', monospace", fontSize: 12, lineHeight: 1.6, color: "#c8d4e8", whiteSpace: "pre-wrap", wordBreak: "break-all" },
+  outputHtml: { fontSize: 12, color: "#c8d4e8", overflowX: "auto" },
+  addBtn: { display: "inline-flex", alignItems: "center", gap: 5, background: "rgba(255,255,255,0.03)", border: "1px dashed rgba(255,255,255,0.10)", borderRadius: 6, padding: "6px 14px", fontSize: 12, color: "#3d4a5c", cursor: "pointer", fontFamily: "'IBM Plex Sans', sans-serif" },
+};

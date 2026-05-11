@@ -1,3 +1,6 @@
+import React from "react";
+
+// --- ICONS ---
 const IconHome = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
     <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
@@ -30,6 +33,22 @@ const IconCatalog = () => (
   </svg>
 );
 
+const IconNotebook = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+    <polyline points="14 2 14 8 20 8"/>
+    <line x1="16" y1="13" x2="8" y2="13"/>
+    <line x1="16" y1="17" x2="8" y2="17"/>
+    <polyline points="10 9 9 9 8 9"/>
+  </svg>
+);
+
+const IconCompute = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+    <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+  </svg>
+);
+
 const IconAdmin = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
     <circle cx="12" cy="12" r="3" />
@@ -45,6 +64,7 @@ const IconLogo = () => (
   </svg>
 );
 
+// --- NAVIGATION CONFIG ---
 const navItems = [
   {
     section: null,
@@ -56,18 +76,26 @@ const navItems = [
     section: "DATA ENGINEERING",
     items: [
       { id: "data-ingestion", label: "Data Ingestion", icon: <IconIngestion /> },
-      { id: "pipelines", label: "Pipelines", icon: <IconPipelines /> },
-      { id: "catalog", label: "Catalog", icon: <IconCatalog /> },
+      { id: "pipelines",      label: "Pipelines",      icon: <IconPipelines /> },
+      { id: "catalog",        label: "Catalog",        icon: <IconCatalog /> },
+      { id: "notebooks",      label: "Notebooks",      icon: <IconNotebook /> }, // Restored
+    ],
+  },
+  {
+    section: "COMPUTE",
+    items: [
+      { id: "compute-profiles", label: "Compute Profiles", icon: <IconCompute /> }, // Restored
     ],
   },
   {
     section: "OPERATIONS",
     items: [
-      { id: "admin", label: "API Console", icon: <IconAdmin /> },
+      { id: "admin", label: "API Console", icon: <IconAdmin /> }, // Restored new Admin
     ],
   },
 ];
 
+// --- MAIN COMPONENT ---
 export default function Sidebar({ activePage, onNavigate }) {
   return (
     <aside style={styles.sidebar}>
@@ -120,6 +148,7 @@ export default function Sidebar({ activePage, onNavigate }) {
   );
 }
 
+// --- CSS STYLES ---
 const styles = {
   sidebar: {
     width: "220px",
@@ -178,7 +207,6 @@ const styles = {
   },
   navItemActive: {
     background: "rgba(30, 110, 244, 0.10)",
-    borderRight: "2px solid #1e6ef4",
   },
   navIcon: {
     display: "flex",
@@ -191,8 +219,10 @@ const styles = {
     right: 0,
     top: 0,
     bottom: 0,
-    width: "2px",
+    width: "3px",
     background: "#1e6ef4",
+    borderTopLeftRadius: "3px", 
+    borderBottomLeftRadius: "3px"
   },
   sidebarFooter: {
     padding: "12px 16px",
