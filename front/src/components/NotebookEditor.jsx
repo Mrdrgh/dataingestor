@@ -1,4 +1,8 @@
 import { useState, useRef, useCallback, useEffect } from "react";
+import { marked } from "marked";
+
+// configure marked once
+marked.setOptions({ breaks: true, gfm: true });
 import { EditorView, keymap, lineNumbers, highlightActiveLine } from "@codemirror/view";
 import { EditorState } from "@codemirror/state";
 import { python } from "@codemirror/lang-python";
@@ -111,8 +115,13 @@ function Cell({ cell, index, total, selected, kernelStatus, onSelect, onUpdate, 
   const taRef = useRef(null);
   const running = cell.metadata?.running === true;
   const canRun = kernelStatus === "ready" || kernelStatus === "idle";
+  // markdown cells start rendered; editing = true shows the textarea
+  const [mdEditing, setMdEditing] = useState(!cell.source || cell.source.trim() === "");
 
   const autoResize = () => { const t = taRef.current; if (t) { t.style.height = "auto"; t.style.height = t.scrollHeight + "px"; } };
+
+  // render markdown: Shift+Enter commits and shows preview
+  const commitMarkdown = () => { if (cell.source.trim()) setMdEditing(false); };
 
   const handleRunStop = (e) => {
     e.stopPropagation();
@@ -153,15 +162,30 @@ function Cell({ cell, index, total, selected, kernelStatus, onSelect, onUpdate, 
           onChange={src => onUpdate(cell.id, { source: src })}
           onRunShortcut={() => { if (!running) onExecute(cell.id); }}
         />
-      ) : (
+      ) : mdEditing ? (
+        /* ── Markdown edit mode ── */
         <textarea ref={taRef} value={cell.source}
+          autoFocus
           onChange={e => { onUpdate(cell.id, { source: e.target.value }); autoResize(); }}
-          onKeyDown={e => { if (e.key === "Enter" && (e.ctrlKey || e.shiftKey)) { e.preventDefault(); if (!running) onExecute(cell.id); } }}
+          onKeyDown={e => {
+            if (e.key === "Enter" && (e.ctrlKey || e.shiftKey)) { e.preventDefault(); commitMarkdown(); }
+            if (e.key === "Escape") { e.preventDefault(); commitMarkdown(); }
+          }}
+          onBlur={commitMarkdown}
           onFocus={() => onSelect(cell.id)}
-          style={{ ...s.ta, fontFamily: "'IBM Plex Sans', sans-serif" }}
-          placeholder="Markdown…"
+          style={{ ...s.ta, fontFamily: "'IBM Plex Mono', monospace" }}
+          placeholder="# Markdown… (Shift+Enter to render)"
           spellCheck={false}
           rows={Math.max(3, cell.source.split("\n").length)}
+        />
+      ) : (
+        /* ── Markdown rendered mode — double-click or click to edit ── */
+        <div
+          className="nb-md"
+          style={s.mdRendered}
+          title="Double-click to edit"
+          onDoubleClick={() => { onSelect(cell.id); setMdEditing(true); }}
+          dangerouslySetInnerHTML={{ __html: marked.parse(cell.source || "_Empty markdown cell — double-click to edit_") }}
         />
       )}
       <CellOutput outputs={cell.outputs} running={running} />
@@ -353,4 +377,5 @@ const s = {
   pre: { margin: 0, fontFamily: "'IBM Plex Mono', monospace", fontSize: 12, lineHeight: 1.6, color: "#c8d4e8", whiteSpace: "pre-wrap", wordBreak: "break-all" },
   outputHtml: { fontSize: 12, color: "#c8d4e8", overflowX: "auto" },
   addBtn: { display: "inline-flex", alignItems: "center", gap: 5, background: "rgba(255,255,255,0.03)", border: "1px dashed rgba(255,255,255,0.10)", borderRadius: 6, padding: "6px 14px", fontSize: 12, color: "#3d4a5c", cursor: "pointer", fontFamily: "'IBM Plex Sans', sans-serif" },
+  mdRendered: { padding: "14px 18px", color: "#c8d4e8", fontSize: 14, lineHeight: 1.8, fontFamily: "'IBM Plex Sans', sans-serif", cursor: "default", minHeight: 40 },
 };
