@@ -1,7 +1,13 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import {
+  GetObjectCommand,
+  ListObjectsV2Command,
+  S3Client,
+} from '@aws-sdk/client-s3';
 import { promises as fs } from 'fs';
 import * as path from 'path';
+import { Readable } from 'stream';
 
 export interface CatalogColumn {
   name: string;
@@ -33,13 +39,39 @@ export interface Catalog {
 export class CatalogService {
   private readonly logger = new Logger(CatalogService.name);
   private readonly deltaBasePath: string;
+  private readonly s3Client: S3Client | null;
+  private readonly s3Bucket: string | null;
+  private readonly s3BasePrefix: string;
 
   constructor(private readonly config: ConfigService) {
     const basePath = this.config.get<string>('DELTA_BASE_PATH') ?? '../delta';
-    this.deltaBasePath = path.resolve(process.cwd(), basePath);
+    if (basePath.startsWith('s3a://')) {
+      const { bucket, prefix } = this.parseS3aPath(basePath);
+      this.deltaBasePath = basePath;
+      this.s3Bucket = bucket;
+      this.s3BasePrefix = prefix;
+      this.s3Client = new S3Client({
+        endpoint: this.config.get<string>('MINIO_ENDPOINT'),
+        region: this.config.get<string>('MINIO_REGION') ?? 'us-east-1',
+        forcePathStyle: this.config.get<boolean>('MINIO_PATH_STYLE') ?? true,
+        credentials: {
+          accessKeyId: this.config.get<string>('MINIO_ROOT_USER') ?? '',
+          secretAccessKey: this.config.get<string>('MINIO_ROOT_PASSWORD') ?? '',
+        },
+      });
+    } else {
+      this.deltaBasePath = path.resolve(process.cwd(), basePath);
+      this.s3Client = null;
+      this.s3Bucket = null;
+      this.s3BasePrefix = '';
+    }
   }
 
   async getCatalog(): Promise<Catalog[]> {
+    if (this.s3Client && this.s3Bucket) {
+      return this.getCatalogFromS3();
+    }
+
     const catalogs: Catalog[] = [];
 
     try {
@@ -68,6 +100,48 @@ export class CatalogService {
             if (!(await this.isDirectory(tablePath))) continue;
 
             const tableData = await this.parseDeltaTable(tablePath, tableName);
+            if (tableData) {
+              tables.push(tableData);
+            }
+          }
+
+          if (tables.length > 0) {
+            schemas.push({ name: schemaName, tables });
+          }
+        }
+
+        if (schemas.length > 0) {
+          catalogs.push({ name: catalogName, schemas });
+        }
+      }
+    } catch (e) {
+      this.logger.error(`Failed to read catalog from ${this.deltaBasePath}`, e);
+    }
+
+    return catalogs;
+  }
+
+  private async getCatalogFromS3(): Promise<Catalog[]> {
+    const catalogs: Catalog[] = [];
+    if (!this.s3Client || !this.s3Bucket) {
+      return catalogs;
+    }
+
+    try {
+      const catalogNames = await this.listS3Prefixes(this.s3BasePrefix);
+      for (const catalogName of catalogNames) {
+        const catalogPrefix = this.joinS3Prefix(this.s3BasePrefix, catalogName);
+        const schemaNames = await this.listS3Prefixes(catalogPrefix);
+        const schemas: CatalogSchema[] = [];
+
+        for (const schemaName of schemaNames) {
+          const schemaPrefix = this.joinS3Prefix(catalogPrefix, schemaName);
+          const tableNames = await this.listS3Prefixes(schemaPrefix);
+          const tables: CatalogTable[] = [];
+
+          for (const tableName of tableNames) {
+            const tablePrefix = this.joinS3Prefix(schemaPrefix, tableName);
+            const tableData = await this.parseDeltaTableFromS3(tablePrefix, tableName);
             if (tableData) {
               tables.push(tableData);
             }
@@ -172,6 +246,173 @@ export class CatalogService {
       this.logger.error(`Failed to parse delta table at ${tablePath}`, e);
       return null;
     }
+  }
+
+  private async parseDeltaTableFromS3(
+    tablePrefix: string,
+    tableName: string,
+  ): Promise<CatalogTable | null> {
+    if (!this.s3Client || !this.s3Bucket) return null;
+
+    const deltaLogPrefix = this.joinS3Prefix(tablePrefix, '_delta_log');
+    const logPrefix = this.ensureTrailingSlash(deltaLogPrefix);
+
+    try {
+      const files = await this.listS3Objects(logPrefix);
+      const jsonFiles = files.filter((f) => f.endsWith('.json')).sort();
+      if (jsonFiles.length === 0) return null;
+
+      let schemaString = '';
+      const activeFiles = new Map<string, any>();
+      let lastUpdatedMs = 0;
+
+      for (const key of jsonFiles) {
+        const content = await this.readS3Object(key);
+        const lines = content.split('\n').filter((l) => l.trim().length > 0);
+
+        for (const line of lines) {
+          try {
+            const entry = JSON.parse(line);
+            if (entry.metaData && entry.metaData.schemaString) {
+              schemaString = entry.metaData.schemaString;
+            }
+            if (entry.add) {
+              activeFiles.set(entry.add.path, entry.add);
+              if (entry.add.modificationTime > lastUpdatedMs) {
+                lastUpdatedMs = entry.add.modificationTime;
+              }
+            }
+            if (entry.remove) {
+              activeFiles.delete(entry.remove.path);
+            }
+            if (entry.commitInfo && entry.commitInfo.timestamp > lastUpdatedMs) {
+              lastUpdatedMs = entry.commitInfo.timestamp;
+            }
+          } catch (e) {
+            this.logger.warn(`Failed to parse delta log line in ${key}`, e);
+          }
+        }
+      }
+
+      let totalRows = 0;
+      let totalSize = 0;
+
+      for (const add of activeFiles.values()) {
+        totalSize += add.size || 0;
+        if (add.stats) {
+          const stats = typeof add.stats === 'string' ? JSON.parse(add.stats) : add.stats;
+          totalRows += stats.numRecords || 0;
+        }
+      }
+
+      let columns: CatalogColumn[] = [];
+      if (schemaString) {
+        try {
+          const parsedSchema = JSON.parse(schemaString);
+          if (parsedSchema.fields) {
+            columns = parsedSchema.fields.map((f: any) => ({
+              name: f.name,
+              type: this.mapSparkType(f.type),
+              nullable: f.nullable,
+              pk: false,
+            }));
+          }
+        } catch (e) {
+          this.logger.warn(`Failed to parse schema JSON for table ${tableName}`, e);
+        }
+      }
+
+      return {
+        name: tableName,
+        format: 'Delta',
+        rows: new Intl.NumberFormat('en-US').format(totalRows),
+        size: this.formatBytes(totalSize),
+        lastUpdated: this.formatTimeAgo(lastUpdatedMs),
+        columns,
+      };
+    } catch (e) {
+      this.logger.error(`Failed to parse delta table at ${tablePrefix}`, e);
+      return null;
+    }
+  }
+
+  private parseS3aPath(pathValue: string): { bucket: string; prefix: string } {
+    const trimmed = pathValue.replace(/^s3a:\/\//, '').replace(/^\//, '');
+    const [bucket, ...rest] = trimmed.split('/');
+    const prefix = rest.join('/');
+    return { bucket, prefix };
+  }
+
+  private joinS3Prefix(base: string, next: string): string {
+    if (!base) return next;
+    if (!next) return base;
+    return `${base.replace(/\/+$/, '')}/${next.replace(/^\/+/, '')}`;
+  }
+
+  private ensureTrailingSlash(prefix: string): string {
+    if (!prefix) return '';
+    return prefix.endsWith('/') ? prefix : `${prefix}/`;
+  }
+
+  private async listS3Prefixes(prefix: string): Promise<string[]> {
+    if (!this.s3Client || !this.s3Bucket) return [];
+
+    const normalizedPrefix = this.ensureTrailingSlash(prefix);
+    const response = await this.s3Client.send(
+      new ListObjectsV2Command({
+        Bucket: this.s3Bucket,
+        Prefix: normalizedPrefix || undefined,
+        Delimiter: '/',
+      }),
+    );
+
+    return (
+      response.CommonPrefixes?.map((p) => p.Prefix)
+        .filter((p): p is string => Boolean(p))
+        .map((p) => p.slice(normalizedPrefix.length).replace(/\/$/, ''))
+        .filter((name) => name.length > 0) ?? []
+    );
+  }
+
+  private async listS3Objects(prefix: string): Promise<string[]> {
+    if (!this.s3Client || !this.s3Bucket) return [];
+
+    const keys: string[] = [];
+    let token: string | undefined;
+    do {
+      const response = await this.s3Client.send(
+        new ListObjectsV2Command({
+          Bucket: this.s3Bucket,
+          Prefix: prefix,
+          ContinuationToken: token,
+        }),
+      );
+      for (const item of response.Contents ?? []) {
+        if (item.Key) keys.push(item.Key);
+      }
+      token = response.IsTruncated ? response.NextContinuationToken : undefined;
+    } while (token);
+
+    return keys;
+  }
+
+  private async readS3Object(key: string): Promise<string> {
+    if (!this.s3Client || !this.s3Bucket) return '';
+
+    const response = await this.s3Client.send(
+      new GetObjectCommand({ Bucket: this.s3Bucket, Key: key }),
+    );
+
+    if (!response.Body) return '';
+    return this.streamToString(response.Body as Readable);
+  }
+
+  private async streamToString(stream: Readable): Promise<string> {
+    const chunks: Buffer[] = [];
+    for await (const chunk of stream) {
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    }
+    return Buffer.concat(chunks).toString('utf-8');
   }
 
   private mapSparkType(type: any): string {

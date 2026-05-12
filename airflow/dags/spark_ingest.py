@@ -9,12 +9,19 @@ def get_spark_session():
     import pyspark
     from delta import configure_spark_with_delta_pip
 
+    packages = build_spark_packages()
     builder = (
         pyspark.sql.SparkSession.builder.appName("DataIngestion")
         .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension")
         .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog")
         .config("spark.jars", "/opt/spark/jars/postgresql-42.7.1.jar")
     )
+
+    if packages:
+        builder = builder.config("spark.jars.packages", packages)
+
+    for key, value in build_s3a_config().items():
+        builder = builder.config(key, value)
 
     return configure_spark_with_delta_pip(builder).getOrCreate()
 
@@ -42,6 +49,9 @@ def resolve_runtime_delta_path(raw_path):
     if not raw_path:
         raise ValueError("Destination path is required")
 
+    if raw_path.startswith("s3a://"):
+        return raw_path
+
     if raw_path.startswith("/opt/airflow/delta"):
         return raw_path
 
@@ -52,6 +62,42 @@ def resolve_runtime_delta_path(raw_path):
         return raw_path.replace("../delta", "/opt/airflow/delta", 1)
 
     return raw_path
+
+
+def build_spark_packages():
+    packages = os.environ.get("SPARK_JARS_PACKAGES")
+    if packages:
+        return packages
+
+    if os.environ.get("MINIO_ENDPOINT"):
+        hadoop_aws = os.environ.get("HADOOP_AWS_VERSION", "3.3.4")
+        aws_bundle = os.environ.get("AWS_SDK_BUNDLE_VERSION", "1.12.262")
+        return f"org.apache.hadoop:hadoop-aws:{hadoop_aws},com.amazonaws:aws-java-sdk-bundle:{aws_bundle}"
+
+    return ""
+
+
+def build_s3a_config():
+    endpoint = os.environ.get("MINIO_ENDPOINT")
+    access_key = os.environ.get("MINIO_ROOT_USER")
+    secret_key = os.environ.get("MINIO_ROOT_PASSWORD")
+    if not endpoint or not access_key or not secret_key:
+        return {}
+
+    use_ssl = os.environ.get("MINIO_USE_SSL", "false").lower() == "true"
+    path_style = os.environ.get("MINIO_PATH_STYLE", "true").lower() == "true"
+    region = os.environ.get("MINIO_REGION", "us-east-1")
+
+    return {
+        "spark.hadoop.fs.s3a.endpoint": endpoint,
+        "spark.hadoop.fs.s3a.access.key": access_key,
+        "spark.hadoop.fs.s3a.secret.key": secret_key,
+        "spark.hadoop.fs.s3a.path.style.access": "true" if path_style else "false",
+        "spark.hadoop.fs.s3a.connection.ssl.enabled": "true" if use_ssl else "false",
+        "spark.hadoop.fs.s3a.aws.credentials.provider": "org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider",
+        "spark.hadoop.fs.s3a.endpoint.region": region,
+        "spark.delta.logStore.class": "org.apache.spark.sql.delta.storage.S3SingleDriverLogStore",
+    }
 
 
 def build_source_config():

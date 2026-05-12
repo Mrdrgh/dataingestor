@@ -4,6 +4,7 @@ import {
   NotFoundException,
   BadGatewayException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { NotebookDatabaseService } from '../notebook-database/notebook-database.service';
 import { CreateComputeProfileDto } from './dto/create-compute-profile.dto';
 import { UpdateComputeProfileDto } from './dto/update-compute-profile.dto';
@@ -27,7 +28,10 @@ export interface ComputeProfile {
 export class ComputeProfileService {
   private readonly logger = new Logger(ComputeProfileService.name);
 
-  constructor(private readonly db: NotebookDatabaseService) {}
+  constructor(
+    private readonly db: NotebookDatabaseService,
+    private readonly config: ConfigService,
+  ) {}
 
   async findAll(): Promise<ComputeProfile[]> {
     const result = await this.db.query<ComputeProfile>(
@@ -64,7 +68,9 @@ export class ComputeProfileService {
         dto.name,
         dto.kernel_gateway_url,
         dto.auth_token ?? null,
-        dto.delta_base_path ?? '/opt/spark/delta',
+        dto.delta_base_path ??
+          this.config.get<string>('DELTA_BASE_PATH') ??
+          '/opt/spark/delta',
         JSON.stringify(dto.spark_config ?? {}),
         JSON.stringify(dto.custom_pip_packages ?? []),
       ],

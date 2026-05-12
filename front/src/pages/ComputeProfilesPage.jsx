@@ -9,7 +9,7 @@ const IconEdit = () => (<svg width="13" height="13" viewBox="0 0 24 24" fill="no
 const IconTest = () => (<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>);
 
 const MOCK = [
-  { id: "cp_001", name: "Local Spark Cluster", kernel_gateway_url: "http://localhost:8888", delta_base_path: "/opt/spark/delta", spark_config: { "spark.executor.memory": "2g" }, custom_pip_packages: [], status: "reachable", created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+  { id: "cp_001", name: "Local Spark Cluster", kernel_gateway_url: "http://localhost:8888", delta_base_path: "s3a://fusion-delta", spark_config: { "spark.executor.memory": "2g" }, custom_pip_packages: [], status: "reachable", created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
 ];
 
 const STATUS = { reachable: { color: "#2ec995", label: "Reachable" }, unreachable: { color: "#f07070", label: "Unreachable" }, unknown: { color: "#f0a347", label: "Unknown" } };
@@ -20,7 +20,7 @@ function Modal({ profile, onSave, onClose }) {
     name: profile?.name || "",
     kernel_gateway_url: profile?.kernel_gateway_url || "http://localhost:8888",
     auth_token: profile?.auth_token || "",
-    delta_base_path: profile?.delta_base_path || "/opt/spark/delta",
+    delta_base_path: profile?.delta_base_path || "s3a://fusion-delta",
     spark_config_raw: profile?.spark_config ? JSON.stringify(profile.spark_config, null, 2) : '{\n  "spark.executor.memory": "2g"\n}',
     custom_pip_packages_raw: (profile?.custom_pip_packages || []).join("\n"),
   });

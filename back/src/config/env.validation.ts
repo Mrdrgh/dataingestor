@@ -42,6 +42,14 @@ export const envValidationSchema = Joi.object({
   PREVIEW_ROW_LIMIT: Joi.number().default(20),
   DELTA_BASE_PATH: Joi.string().default('../airflow_spark_delta/delta'),
 
+  MINIO_ENDPOINT: Joi.string().default('http://localhost:9000'),
+  MINIO_ROOT_USER: Joi.string().default('minioadmin'),
+  MINIO_ROOT_PASSWORD: Joi.string().default('minioadmin'),
+  MINIO_BUCKET: Joi.string().default('fusion-delta'),
+  MINIO_REGION: Joi.string().default('us-east-1'),
+  MINIO_USE_SSL: Joi.boolean().default(false),
+  MINIO_PATH_STYLE: Joi.boolean().default(true),
+
   NB_PGHOST: Joi.string().default('localhost'),
   NB_PGPORT: Joi.number().default(5434),
   NB_PGDATABASE: Joi.string().default('notebooks_db'),
