@@ -1,5 +1,8 @@
 import { useState, useRef, useCallback, useEffect } from "react";
-
+import CodeMirror from '@uiw/react-codemirror';
+import { python } from '@codemirror/lang-python';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 const WS_URL = "ws://localhost:3001/ws/notebook";
 const API_URL = "http://localhost:3001";
 
@@ -47,11 +50,14 @@ function Cell({ cell, index, total, selected, kernelStatus, onSelect, onUpdate, 
   const taRef = useRef(null);
   const running = cell.metadata?.running === true;
   const canRun = kernelStatus === "ready" || kernelStatus === "idle";
-
-  const autoResize = () => { const t = taRef.current; if (t) { t.style.height = "auto"; t.style.height = t.scrollHeight + "px"; } };
+  const [isEditingMd, setIsEditingMd] = useState(cell.type === "markdown" && !cell.source);
 
   const handleRunStop = (e) => {
     e.stopPropagation();
+    if (cell.type === "markdown") {
+      setIsEditingMd(false);
+      return;
+    }
     if (running) {
       // BUG 1 FIX: Stop sends interrupt, not re-execute
       onStop(cell.id);
@@ -66,16 +72,26 @@ function Cell({ cell, index, total, selected, kernelStatus, onSelect, onUpdate, 
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <span style={s.execCount}>{running ? "*" : cell.execution_count != null ? `[${cell.execution_count}]` : "[ ]"}</span>
           <button style={{ ...s.cellTypeBtn, color: cell.type === "code" ? "#4a9eff" : "#b07ff0" }}
-            onClick={e => { e.stopPropagation(); onUpdate(cell.id, { type: cell.type === "code" ? "markdown" : "code" }); }}>
+            onClick={e => { 
+              e.stopPropagation(); 
+              const newType = cell.type === "code" ? "markdown" : "code";
+              onUpdate(cell.id, { type: newType }); 
+              if (newType === "markdown") setIsEditingMd(true);
+            }}>
             {cell.type === "code" ? <IconCode /> : <IconMd />}
             <span style={{ fontSize: 10 }}>{cell.type}</span>
           </button>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
-          {cell.type === "code" && (
+          {cell.type === "code" ? (
             <button style={{ ...s.cellBtn, color: running ? "#f07070" : canRun ? "#2ec995" : "#3d4a5c" }}
               onClick={handleRunStop} disabled={!canRun && !running}>
               {running ? <IconStop /> : <IconPlay />}
+            </button>
+          ) : (
+            <button style={{ ...s.cellBtn, color: isEditingMd ? "#2ec995" : "#3d4a5c" }}
+              onClick={handleRunStop} title="Render Markdown">
+              <IconPlay />
             </button>
           )}
           <button style={s.cellBtn} onClick={e => { e.stopPropagation(); onMoveUp(cell.id); }} disabled={index === 0}><IconArrowUp /></button>
@@ -83,15 +99,39 @@ function Cell({ cell, index, total, selected, kernelStatus, onSelect, onUpdate, 
           <button style={{ ...s.cellBtn, color: "#f07070" }} onClick={e => { e.stopPropagation(); onDelete(cell.id); }}><IconTrash /></button>
         </div>
       </div>
-      <textarea ref={taRef} value={cell.source}
-        onChange={e => { onUpdate(cell.id, { source: e.target.value }); autoResize(); }}
-        onKeyDown={e => { if (e.key === "Enter" && (e.ctrlKey || e.shiftKey)) { e.preventDefault(); if (!running) onExecute(cell.id); } }}
-        onFocus={() => onSelect(cell.id)}
-        style={{ ...s.ta, fontFamily: cell.type === "code" ? "'IBM Plex Mono', monospace" : "'IBM Plex Sans', sans-serif" }}
-        placeholder={cell.type === "code" ? "# PySpark code… (Shift+Enter to run)" : "Markdown…"}
-        spellCheck={false}
-        rows={Math.max(3, cell.source.split("\n").length)}
-      />
+      
+      {cell.type === "markdown" && !isEditingMd ? (
+        <div 
+          style={{ padding: "12px 14px", cursor: "pointer", minHeight: 60 }}
+          onDoubleClick={() => setIsEditingMd(true)}
+          className="markdown-body"
+        >
+          <ReactMarkdown remarkPlugins={[remarkGfm]}>
+            {cell.source || "*Double-click to edit Markdown*"}
+          </ReactMarkdown>
+        </div>
+      ) : (
+        <div style={{ minHeight: 60 }} onKeyDown={e => {
+            if (e.key === "Enter" && (e.ctrlKey || e.shiftKey)) {
+              e.preventDefault();
+              if (cell.type === "markdown") {
+                setIsEditingMd(false);
+              } else if (!running) {
+                onExecute(cell.id);
+              }
+            }
+          }}>
+          <CodeMirror
+            value={cell.source}
+            theme="dark"
+            extensions={cell.type === "code" ? [python()] : []}
+            onChange={(val) => onUpdate(cell.id, { source: val })}
+            onFocus={() => onSelect(cell.id)}
+            style={{ fontSize: 13, fontFamily: "'IBM Plex Mono', monospace" }}
+            className="cm-theme-dark"
+          />
+        </div>
+      )}
       <CellOutput outputs={cell.outputs} running={running} />
     </div>
   );

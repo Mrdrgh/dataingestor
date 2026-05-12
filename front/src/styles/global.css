@@ -128,3 +128,66 @@ a {
 .fade-in {
   animation: fadeIn 0.25s ease forwards;
 }
+
+.markdown-body {
+  font-family: var(--font-sans);
+  color: var(--text-primary);
+  line-height: 1.6;
+}
+
+.markdown-body h1, .markdown-body h2, .markdown-body h3, .markdown-body h4 {
+  margin-top: 24px;
+  margin-bottom: 16px;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.markdown-body h1 { font-size: 2em; border-bottom: 1px solid var(--border-default); padding-bottom: .3em; }
+.markdown-body h2 { font-size: 1.5em; border-bottom: 1px solid var(--border-default); padding-bottom: .3em; }
+.markdown-body h3 { font-size: 1.25em; }
+
+.markdown-body p, .markdown-body blockquote, .markdown-body ul, .markdown-body ol, .markdown-body dl, .markdown-body table, .markdown-body pre, .markdown-body details {
+  margin-top: 0;
+  margin-bottom: 16px;
+}
+
+.markdown-body code {
+  font-family: var(--font-mono);
+  font-size: 85%;
+  background-color: rgba(255, 255, 255, 0.1);
+  padding: 0.2em 0.4em;
+  border-radius: 6px;
+}
+
+.markdown-body pre {
+  background-color: var(--bg-secondary);
+  border-radius: 6px;
+  padding: 16px;
+  overflow: auto;
+}
+
+.markdown-body pre code {
+  background-color: transparent;
+  padding: 0;
+  border-radius: 0;
+}
+
+.markdown-body a {
+  color: var(--accent-blue);
+  text-decoration: none;
+}
+.markdown-body a:hover {
+  text-decoration: underline;
+}
+
+.cm-theme-dark.cm-editor {
+  background: transparent !important;
+}
+.cm-theme-dark .cm-gutters {
+  background: transparent !important;
+  border-right: 1px solid var(--border-subtle) !important;
+  color: var(--text-muted) !important;
+}
+.cm-theme-dark .cm-activeLine, .cm-theme-dark .cm-activeLineGutter {
+  background-color: rgba(255,255,255,0.03) !important;
+}
