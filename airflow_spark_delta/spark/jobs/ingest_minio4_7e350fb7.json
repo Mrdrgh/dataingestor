@@ -1,6 +1,6 @@
 {
-  "pipelineId": "b67a4e97-183f-45c3-8eef-7deb8b2171e7",
-  "dagId": "ingest_pipeline4_b67a4e97",
+  "pipelineId": "7e350fb7-bbe4-472f-895b-6008ea5564ed",
+  "dagId": "ingest_minio4_7e350fb7",
   "source": {
     "schema": "public",
     "table": "forge_users",
@@ -10,7 +10,7 @@
     "mode": "full"
   },
   "destination": {
-    "path": "s3a://fusion-delta/fusion_catalog/public/forge_users",
+    "path": "s3a://fusion-delta/fusion_catalog/raw/forge_users",
     "mode": "overwrite"
   },
   "schedule": {

@@ -10,12 +10,15 @@ def get_spark_session():
     from delta import configure_spark_with_delta_pip
 
     packages = build_spark_packages()
+    local_jars = build_local_jars()
     builder = (
         pyspark.sql.SparkSession.builder.appName("DataIngestion")
         .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension")
         .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog")
-        .config("spark.jars", "/opt/spark/jars/postgresql-42.7.1.jar")
     )
+
+    if local_jars:
+        builder = builder.config("spark.jars", ",".join(local_jars))
 
     if packages:
         builder = builder.config("spark.jars.packages", packages)
@@ -52,6 +55,11 @@ def resolve_runtime_delta_path(raw_path):
     if raw_path.startswith("s3a://"):
         return raw_path
 
+    base_path = os.environ.get("DELTA_BASE_PATH")
+    if base_path and base_path.startswith("s3a://"):
+        relative = strip_delta_prefix(raw_path)
+        return join_paths(base_path, relative)
+
     if raw_path.startswith("/opt/airflow/delta"):
         return raw_path
 
@@ -64,17 +72,70 @@ def resolve_runtime_delta_path(raw_path):
     return raw_path
 
 
+def strip_delta_prefix(raw_path):
+    for prefix in (
+        "/opt/airflow/delta",
+        "../airflow_spark_delta/delta",
+        "../delta",
+    ):
+        if raw_path.startswith(prefix):
+            return raw_path[len(prefix):]
+    return raw_path
+
+
+def join_paths(base_path, suffix):
+    base = base_path.rstrip("/")
+    tail = suffix.lstrip("/")
+    if not tail:
+        return base
+    return f"{base}/{tail}"
+
+
 def build_spark_packages():
+    if os.environ.get("MINIO_ENDPOINT"):
+        hadoop_aws = os.environ.get("HADOOP_AWS_VERSION", "3.3.4")
+        aws_bundle = os.environ.get("AWS_SDK_BUNDLE_VERSION", "1.12.262")
+        default_packages = (
+            f"org.apache.hadoop:hadoop-aws:{hadoop_aws},"
+            f"com.amazonaws:aws-java-sdk-bundle:{aws_bundle}"
+        )
+        packages = os.environ.get("SPARK_JARS_PACKAGES")
+        if packages:
+            if packages == default_packages and has_local_s3a_jars():
+                return ""
+            return packages
+        if has_local_s3a_jars():
+            return ""
+        return default_packages
+
     packages = os.environ.get("SPARK_JARS_PACKAGES")
     if packages:
         return packages
 
-    if os.environ.get("MINIO_ENDPOINT"):
-        hadoop_aws = os.environ.get("HADOOP_AWS_VERSION", "3.3.4")
-        aws_bundle = os.environ.get("AWS_SDK_BUNDLE_VERSION", "1.12.262")
-        return f"org.apache.hadoop:hadoop-aws:{hadoop_aws},com.amazonaws:aws-java-sdk-bundle:{aws_bundle}"
-
     return ""
+
+
+def build_local_jars():
+    jars = []
+    base_dir = Path("/opt/spark/jars")
+    postgres_jar = base_dir / "postgresql-42.7.1.jar"
+    if postgres_jar.exists():
+        jars.append(str(postgres_jar))
+
+    jars.extend(str(path) for path in base_dir.glob("hadoop-aws-*.jar"))
+    jars.extend(str(path) for path in base_dir.glob("aws-java-sdk-bundle-*.jar"))
+
+    return jars
+
+
+def has_local_s3a_jars():
+    jars_dir = Path("/opt/spark/jars")
+    if not jars_dir.exists():
+        return False
+
+    has_hadoop = any(jars_dir.glob("hadoop-aws-*.jar"))
+    has_aws_bundle = any(jars_dir.glob("aws-java-sdk-bundle-*.jar"))
+    return has_hadoop and has_aws_bundle
 
 
 def build_s3a_config():

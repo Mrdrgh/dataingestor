@@ -10,7 +10,7 @@
     "mode": "full"
   },
   "destination": {
-    "path": "../airflow_spark_delta/delta/fusion_catalog/bronze/forge_users",
+    "path": "s3a://fusion-delta/fusion_catalog/public/forge_users",
     "mode": "overwrite"
   },
   "schedule": {

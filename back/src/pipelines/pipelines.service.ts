@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Injectable,
   NotFoundException,
+  OnModuleInit,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { promises as fs } from 'fs';
@@ -20,11 +21,13 @@ import {
 } from './pipeline.types';
 
 @Injectable()
-export class PipelinesService {
+export class PipelinesService implements OnModuleInit {
   private readonly filePath: string;
   private readonly dagsDir: string;
   private readonly sparkJobsDir: string;
   private readonly deltaBasePath: string;
+  private readonly defaultCatalog = 'fusion_catalog';
+  private readonly defaultLayer = 'raw';
   private writeQueue: Promise<void> = Promise.resolve();
 
   constructor(
@@ -46,6 +49,10 @@ export class PipelinesService {
 
     this.deltaBasePath =
       this.config.get<string>('DELTA_BASE_PATH') ?? '../airflow_spark_delta/delta';
+  }
+
+  async onModuleInit(): Promise<void> {
+    await this.migrateLegacyDestinations();
   }
 
   async list(): Promise<PipelineDefinition[]> {
@@ -131,7 +138,12 @@ export class PipelinesService {
     }
     const slug = this.slugify(name);
     const dagId = `ingest_${slug}_${id.replace(/-/g, '').slice(0, 8)}`;
-    const destination = this.buildDestination(dto.destination, slug, dto.ingestion.mode);
+    const source = this.buildSource(dto.source);
+    const destination = this.buildDestination(
+      dto.destination,
+      source,
+      dto.ingestion.mode,
+    );
 
     return {
       id,
@@ -139,7 +151,7 @@ export class PipelinesService {
       description: dto.description?.trim() || null,
       createdAt: now,
       updatedAt: now,
-      source: this.buildSource(dto.source),
+      source,
       ingestion: this.buildIngestion(dto.ingestion),
       destination,
       schedule: this.buildSchedule(dto.schedule),
@@ -161,7 +173,6 @@ export class PipelinesService {
     if (!name) {
       throw new BadRequestException('Pipeline name is required');
     }
-    const slug = this.slugify(name);
 
     const merged: PipelineDefinition = {
       ...current,
@@ -177,7 +188,7 @@ export class PipelinesService {
       },
       destination: {
         ...current.destination,
-        ...this.normalizeDestination(dto.destination, slug),
+        ...this.normalizeDestination(dto.destination),
       },
       schedule: {
         ...current.schedule,
@@ -271,21 +282,22 @@ export class PipelinesService {
 
   private buildDestination(
     input: CreatePipelineDto['destination'] | undefined,
-    slug: string,
+    source: PipelineSource,
     ingestionMode: PipelineIngestion['mode'],
   ): PipelineDestination {
-    const basePath = this.deltaBasePath.replace(/\/+$/, '');
     const defaultMode = ingestionMode === 'incremental' ? 'append' : 'overwrite';
+    const explicitPath = input?.path?.trim();
 
     return {
-      path: input?.path?.trim() || `${basePath}/${slug}`,
+      path: explicitPath && explicitPath.length > 0
+        ? explicitPath
+        : this.buildDefaultDestinationPath(source),
       mode: input?.mode ?? defaultMode,
     };
   }
 
   private normalizeDestination(
     input: UpdatePipelineDto['destination'] | undefined,
-    slug: string,
   ): Partial<PipelineDestination> {
     if (!input) {
       return {};
@@ -302,6 +314,76 @@ export class PipelinesService {
     }
 
     return result;
+  }
+
+  private buildDefaultDestinationPath(source: PipelineSource): string {
+    return this.joinPath(
+      this.deltaBasePath,
+      this.defaultCatalog,
+      this.defaultLayer,
+      source.table,
+    );
+  }
+
+  private joinPath(basePath: string, ...segments: string[]): string {
+    const trimmedBase = basePath.trim().replace(/\/+$/, '');
+    const cleanedSegments = segments
+      .map((segment) => segment.trim().replace(/^\/+|\/+$/g, ''))
+      .filter((segment) => segment.length > 0);
+
+    if (!trimmedBase) {
+      return cleanedSegments.join('/');
+    }
+
+    return [trimmedBase, ...cleanedSegments].join('/');
+  }
+
+  private isLegacyLocalDeltaPath(value: string): boolean {
+    const trimmed = value.trim();
+    return (
+      trimmed === '../delta' ||
+      trimmed.startsWith('../delta/') ||
+      trimmed === '../airflow_spark_delta/delta' ||
+      trimmed.startsWith('../airflow_spark_delta/delta/')
+    );
+  }
+
+  private async migrateLegacyDestinations(): Promise<void> {
+    const data = await this.loadFile();
+    const pipelinesToUpdate: PipelineDefinition[] = [];
+    const now = new Date().toISOString();
+
+    for (const pipeline of data.pipelines) {
+      const currentPath = pipeline.destination?.path?.trim() ?? '';
+      const shouldRewrite =
+        !currentPath || this.isLegacyLocalDeltaPath(currentPath);
+
+      if (!shouldRewrite) {
+        continue;
+      }
+
+      const nextPath = this.buildDefaultDestinationPath(pipeline.source);
+      if (nextPath === currentPath) {
+        continue;
+      }
+
+      pipeline.destination = {
+        ...pipeline.destination,
+        path: nextPath,
+      } as PipelineDestination;
+      pipeline.updatedAt = now;
+      pipelinesToUpdate.push(pipeline);
+    }
+
+    if (pipelinesToUpdate.length === 0) {
+      return;
+    }
+
+    await this.saveFile(data);
+
+    for (const pipeline of pipelinesToUpdate) {
+      await this.writeSparkConfigFile(pipeline);
+    }
   }
 
   private buildSchedule(

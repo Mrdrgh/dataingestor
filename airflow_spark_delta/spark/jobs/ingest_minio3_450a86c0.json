@@ -1,6 +1,6 @@
 {
-  "pipelineId": "b67a4e97-183f-45c3-8eef-7deb8b2171e7",
-  "dagId": "ingest_pipeline4_b67a4e97",
+  "pipelineId": "450a86c0-7392-475a-9b5a-312abd4930e0",
+  "dagId": "ingest_minio3_450a86c0",
   "source": {
     "schema": "public",
     "table": "forge_users",
@@ -10,10 +10,10 @@
     "mode": "full"
   },
   "destination": {
-    "path": "s3a://fusion-delta/fusion_catalog/public/forge_users",
+    "path": "s3a://fusion-delta/fusion_catalog/raw/forge_users",
     "mode": "overwrite"
   },
   "schedule": {
-    "cron": "0 * * * *"
+    "cron": null
   }
 }

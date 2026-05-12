@@ -5,7 +5,7 @@
       "name": "test_ingestion",
       "description": null,
       "createdAt": "2026-05-08T14:46:57.184Z",
-      "updatedAt": "2026-05-08T14:46:57.184Z",
+      "updatedAt": "2026-05-12T14:18:37.388Z",
       "source": {
         "schema": "public",
         "table": "achraf_data",
@@ -16,7 +16,7 @@
         "watermarkColumn": "id"
       },
       "destination": {
-        "path": "../delta/fusion_catalog/raw/achraf_data",
+        "path": "s3a://fusion-delta/fusion_catalog/public/achraf_data",
         "mode": "append"
       },
       "schedule": {
@@ -32,7 +32,7 @@
       "name": "fusion_forge_db_ingestion",
       "description": null,
       "createdAt": "2026-05-08T15:01:01.426Z",
-      "updatedAt": "2026-05-08T15:01:01.426Z",
+      "updatedAt": "2026-05-12T14:18:37.394Z",
       "source": {
         "schema": "public",
         "table": "forge_users",
@@ -43,7 +43,7 @@
         "watermarkColumn": "id"
       },
       "destination": {
-        "path": "../delta/fusion_catalog/raw/forge_users",
+        "path": "s3a://fusion-delta/fusion_catalog/public/forge_users",
         "mode": "append"
       },
       "schedule": {
@@ -59,7 +59,7 @@
       "name": "pipeline2",
       "description": null,
       "createdAt": "2026-05-08T15:46:30.405Z",
-      "updatedAt": "2026-05-08T15:46:30.405Z",
+      "updatedAt": "2026-05-12T14:18:37.396Z",
       "source": {
         "schema": "public",
         "table": "forge_users",
@@ -70,7 +70,7 @@
         "watermarkColumn": "id"
       },
       "destination": {
-        "path": "../delta/fusion_catalog/raw/forge_users",
+        "path": "s3a://fusion-delta/fusion_catalog/public/forge_users",
         "mode": "append"
       },
       "schedule": {
@@ -86,7 +86,7 @@
       "name": "pipeline3",
       "description": null,
       "createdAt": "2026-05-08T16:13:34.529Z",
-      "updatedAt": "2026-05-08T16:13:34.529Z",
+      "updatedAt": "2026-05-12T14:18:37.399Z",
       "source": {
         "schema": "public",
         "table": "forge_users",
@@ -96,7 +96,7 @@
         "mode": "full"
       },
       "destination": {
-        "path": "../airflow_spark_delta/delta/fusion_catalog/raw/forge_users",
+        "path": "s3a://fusion-delta/fusion_catalog/public/forge_users",
         "mode": "overwrite"
       },
       "schedule": {
@@ -115,7 +115,7 @@
       "name": "pipeline4",
       "description": null,
       "createdAt": "2026-05-08T16:46:30.994Z",
-      "updatedAt": "2026-05-08T16:46:30.994Z",
+      "updatedAt": "2026-05-12T14:18:37.401Z",
       "source": {
         "schema": "public",
         "table": "forge_users",
@@ -125,7 +125,7 @@
         "mode": "full"
       },
       "destination": {
-        "path": "../airflow_spark_delta/delta/fusion_catalog/test_schema/forge_users",
+        "path": "s3a://fusion-delta/fusion_catalog/public/forge_users",
         "mode": "overwrite"
       },
       "schedule": {
@@ -144,7 +144,7 @@
       "name": "pipeline5",
       "description": null,
       "createdAt": "2026-05-08T16:57:21.735Z",
-      "updatedAt": "2026-05-08T16:57:21.735Z",
+      "updatedAt": "2026-05-12T14:18:37.402Z",
       "source": {
         "schema": "public",
         "table": "forge_users",
@@ -154,7 +154,7 @@
         "mode": "full"
       },
       "destination": {
-        "path": "../airflow_spark_delta/delta/fusion_catalog/bronze/forge_users",
+        "path": "s3a://fusion-delta/fusion_catalog/public/forge_users",
         "mode": "overwrite"
       },
       "schedule": {
@@ -166,6 +166,122 @@
       },
       "spark": {
         "configPath": "../airflow_spark_delta/spark/jobs/ingest_pipeline5_5aa6b23d.json"
+      }
+    },
+    {
+      "id": "b51d5492-c3ee-4831-9195-1cce6d3dc3ed",
+      "name": "minioPipeline",
+      "description": null,
+      "createdAt": "2026-05-12T14:20:16.366Z",
+      "updatedAt": "2026-05-12T14:26:13.883Z",
+      "source": {
+        "schema": "public",
+        "table": "forge_users",
+        "columns": []
+      },
+      "ingestion": {
+        "mode": "full"
+      },
+      "destination": {
+        "path": "s3a://fusion-delta/fusion_catalog/public/forge_users",
+        "mode": "overwrite"
+      },
+      "schedule": {
+        "cron": "0 * * * *"
+      },
+      "dag": {
+        "dagId": "ingest_miniopipeline_b51d5492",
+        "filePath": "../airflow/dags/ingest_miniopipeline_b51d5492.py"
+      },
+      "spark": {
+        "configPath": "../airflow_spark_delta/spark/jobs/ingest_miniopipeline_b51d5492.json"
+      }
+    },
+    {
+      "id": "a0374db4-6812-4d18-8b5b-52274b1ba057",
+      "name": "minio2pipiline",
+      "description": null,
+      "createdAt": "2026-05-12T14:31:01.597Z",
+      "updatedAt": "2026-05-12T14:37:16.374Z",
+      "source": {
+        "schema": "public",
+        "table": "forge_users",
+        "columns": []
+      },
+      "ingestion": {
+        "mode": "full"
+      },
+      "destination": {
+        "path": "s3a://fusion-delta/fusion_catalog/public/forge_users",
+        "mode": "overwrite"
+      },
+      "schedule": {
+        "cron": null
+      },
+      "dag": {
+        "dagId": "ingest_minio2pipiline_a0374db4",
+        "filePath": "../airflow/dags/ingest_minio2pipiline_a0374db4.py"
+      },
+      "spark": {
+        "configPath": "../airflow_spark_delta/spark/jobs/ingest_minio2pipiline_a0374db4.json"
+      }
+    },
+    {
+      "id": "450a86c0-7392-475a-9b5a-312abd4930e0",
+      "name": "minio3",
+      "description": null,
+      "createdAt": "2026-05-12T15:16:14.933Z",
+      "updatedAt": "2026-05-12T15:22:45.112Z",
+      "source": {
+        "schema": "public",
+        "table": "forge_users",
+        "columns": []
+      },
+      "ingestion": {
+        "mode": "full"
+      },
+      "destination": {
+        "path": "s3a://fusion-delta/fusion_catalog/raw/forge_users",
+        "mode": "overwrite"
+      },
+      "schedule": {
+        "cron": null
+      },
+      "dag": {
+        "dagId": "ingest_minio3_450a86c0",
+        "filePath": "../airflow/dags/ingest_minio3_450a86c0.py"
+      },
+      "spark": {
+        "configPath": "../airflow_spark_delta/spark/jobs/ingest_minio3_450a86c0.json"
+      }
+    },
+    {
+      "id": "7e350fb7-bbe4-472f-895b-6008ea5564ed",
+      "name": "minio4",
+      "description": null,
+      "createdAt": "2026-05-12T15:55:32.973Z",
+      "updatedAt": "2026-05-12T15:56:35.484Z",
+      "source": {
+        "schema": "public",
+        "table": "forge_users",
+        "columns": []
+      },
+      "ingestion": {
+        "mode": "full"
+      },
+      "destination": {
+        "path": "s3a://fusion-delta/fusion_catalog/raw/forge_users",
+        "mode": "overwrite"
+      },
+      "schedule": {
+        "cron": "0 * * * *"
+      },
+      "dag": {
+        "dagId": "ingest_minio4_7e350fb7",
+        "filePath": "../airflow/dags/ingest_minio4_7e350fb7.py"
+      },
+      "spark": {
+        "configPath": "../airflow_spark_delta/spark/jobs/ingest_minio4_7e350fb7.json"
       }
     }
   ]

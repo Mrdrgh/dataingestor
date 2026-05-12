@@ -1,0 +1,20 @@
+{
+  "pipelineId": "59d86923-ad81-4d5c-a80c-5e589c9e3458",
+  "dagId": "ingest_test_ingestion_59d86923",
+  "source": {
+    "schema": "public",
+    "table": "achraf_data",
+    "columns": []
+  },
+  "ingestion": {
+    "mode": "incremental",
+    "watermarkColumn": "id"
+  },
+  "destination": {
+    "path": "s3a://fusion-delta/fusion_catalog/public/achraf_data",
+    "mode": "append"
+  },
+  "schedule": {
+    "cron": null
+  }
+}

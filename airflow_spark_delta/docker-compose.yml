@@ -2,7 +2,11 @@ version: '3.8'
 
 x-airflow-common:
   &airflow-common
-  build: .
+  build:
+    context: .
+    args:
+      HADOOP_AWS_VERSION: ${HADOOP_AWS_VERSION:-3.3.4}
+      AWS_SDK_BUNDLE_VERSION: ${AWS_SDK_BUNDLE_VERSION:-1.12.262}
   user: "${AIRFLOW_UID:-50000}:${AIRFLOW_GID:-0}"
   environment:
     &airflow-common-env
@@ -24,6 +28,7 @@ x-airflow-common:
     MINIO_REGION: ${MINIO_REGION:-us-east-1}
     MINIO_USE_SSL: ${MINIO_USE_SSL:-false}
     MINIO_PATH_STYLE: ${MINIO_PATH_STYLE:-true}
+    DELTA_BASE_PATH: s3a://${MINIO_BUCKET}
     SPARK_JARS_PACKAGES: ${SPARK_JARS_PACKAGES:-org.apache.hadoop:hadoop-aws:${HADOOP_AWS_VERSION:-3.3.4},com.amazonaws:aws-java-sdk-bundle:${AWS_SDK_BUNDLE_VERSION:-1.12.262}}
   volumes:
     - ../airflow/dags:/opt/airflow/dags

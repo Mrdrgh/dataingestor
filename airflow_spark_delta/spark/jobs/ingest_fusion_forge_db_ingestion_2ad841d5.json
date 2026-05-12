@@ -1,6 +1,6 @@
 {
-  "pipelineId": "ec4a3a0f-9948-45ad-9cf7-8dbb481b054e",
-  "dagId": "ingest_pipeline2_ec4a3a0f",
+  "pipelineId": "2ad841d5-8305-43ee-8188-6996916f5ec6",
+  "dagId": "ingest_fusion_forge_db_ingestion_2ad841d5",
   "source": {
     "schema": "public",
     "table": "forge_users",
