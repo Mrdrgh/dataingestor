@@ -1,11 +1,11 @@
-import { IsString, IsOptional, IsUUID } from 'class-validator';
+import { IsString, IsOptional, IsUUID, IsNotEmpty } from 'class-validator';
 
 export class CreateNotebookDto {
   @IsOptional()
   @IsString()
   title?: string;
 
-  @IsOptional()
   @IsUUID()
-  compute_profile_id?: string;
+  @IsNotEmpty({ message: 'A compute profile is required to create a notebook' })
+  compute_profile_id!: string;
 }

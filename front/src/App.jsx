@@ -6,7 +6,7 @@ import PipelinesPage from "./pages/PipelinesPage";
 import CatalogPage from "./pages/CatalogPage";
 import AdminPage from "./pages/AdminPage";
 // FIX: We must import these two so the switch statement doesn't crash!
-import NotebooksPage from "./pages/NotebooksPage"; 
+import NotebooksPage from "./pages/Notebookspage"; 
 import ComputeProfilesPage from "./pages/ComputeProfilesPage"; 
 import "./styles/global.css";
 

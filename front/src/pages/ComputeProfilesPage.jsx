@@ -9,7 +9,7 @@ const IconEdit = () => (<svg width="13" height="13" viewBox="0 0 24 24" fill="no
 const IconTest = () => (<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>);
 
 const MOCK = [
-  { id: "cp_001", name: "Local Spark Cluster", kernel_gateway_url: "http://localhost:8888", delta_base_path: "/opt/spark/delta", spark_config: { "spark.executor.memory": "2g" }, status: "reachable", created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+  { id: "cp_001", name: "Local Spark Cluster", kernel_gateway_url: "http://localhost:8888", delta_base_path: "/opt/spark/delta", spark_config: { "spark.executor.memory": "2g" }, custom_pip_packages: [], status: "reachable", created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
 ];
 
 const STATUS = { reachable: { color: "#2ec995", label: "Reachable" }, unreachable: { color: "#f07070", label: "Unreachable" }, unknown: { color: "#f0a347", label: "Unknown" } };
@@ -22,6 +22,7 @@ function Modal({ profile, onSave, onClose }) {
     auth_token: profile?.auth_token || "",
     delta_base_path: profile?.delta_base_path || "/opt/spark/delta",
     spark_config_raw: profile?.spark_config ? JSON.stringify(profile.spark_config, null, 2) : '{\n  "spark.executor.memory": "2g"\n}',
+    custom_pip_packages_raw: (profile?.custom_pip_packages || []).join("\n"),
   });
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
@@ -31,7 +32,11 @@ function Modal({ profile, onSave, onClose }) {
     setErr("");
     let spark_config = {};
     try { spark_config = JSON.parse(form.spark_config_raw); } catch { setErr("spark_config must be valid JSON"); return; }
-    const payload = { name: form.name, kernel_gateway_url: form.kernel_gateway_url, auth_token: form.auth_token || undefined, delta_base_path: form.delta_base_path, spark_config };
+    const custom_pip_packages = form.custom_pip_packages_raw
+      .split("\n")
+      .map(s => s.trim())
+      .filter(Boolean);
+    const payload = { name: form.name, kernel_gateway_url: form.kernel_gateway_url, auth_token: form.auth_token || undefined, delta_base_path: form.delta_base_path, spark_config, custom_pip_packages };
     setLoading(true);
     try {
       const res = await fetch(isEdit ? `${API_URL}/compute-profiles/${profile.id}` : `${API_URL}/compute-profiles`, { method: isEdit ? "PUT" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
@@ -51,6 +56,7 @@ function Modal({ profile, onSave, onClose }) {
           <div style={s.fg}><label style={s.label}>Delta base path *</label><input value={form.delta_base_path} onChange={e => set("delta_base_path", e.target.value)} style={s.input} /></div>
         </div>
         <div style={s.fg}><label style={s.label}>Spark config (JSON)</label><textarea value={form.spark_config_raw} onChange={e => set("spark_config_raw", e.target.value)} style={{ ...s.input, fontFamily: "'IBM Plex Mono', monospace", fontSize: 12, minHeight: 90, resize: "vertical" }} /></div>
+        <div style={s.fg}><label style={s.label}>Custom pip packages (one per line)</label><textarea value={form.custom_pip_packages_raw} onChange={e => set("custom_pip_packages_raw", e.target.value)} style={{ ...s.input, fontFamily: "'IBM Plex Mono', monospace", fontSize: 12, minHeight: 70, resize: "vertical" }} placeholder="pandas\npyarrow" /></div>
         {err && <div style={{ fontSize: 12, color: "#f07070" }}>{err}</div>}
         <div style={s.mActions}>
           <button style={s.cancelBtn} onClick={onClose}>Cancel</button>
@@ -90,6 +96,7 @@ function Card({ profile, onEdit, onDelete }) {
         <div style={s.infoRow}><span style={s.infoLabel}>Gateway</span><code style={s.infoCode}>{profile.kernel_gateway_url}</code></div>
         <div style={s.infoRow}><span style={s.infoLabel}>Delta</span><code style={s.infoCode}>{profile.delta_base_path}</code></div>
         {profile.spark_config && <div style={s.infoRow}><span style={s.infoLabel}>Config</span><span style={s.infoCode}>{Object.keys(profile.spark_config).length} keys</span></div>}
+        {profile.custom_pip_packages?.length > 0 && <div style={s.infoRow}><span style={s.infoLabel}>Pip</span><span style={s.infoCode}>{profile.custom_pip_packages.length} packages</span></div>}
       </div>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 5 }}>

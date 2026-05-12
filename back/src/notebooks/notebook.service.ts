@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { NotebookDatabaseService } from '../notebook-database/notebook-database.service';
 import { CreateNotebookDto } from './dto/create-notebook.dto';
 import { UpdateNotebookDto } from './dto/update-notebook.dto';
@@ -67,11 +67,22 @@ export class NotebookService {
   }
 
   async create(dto: CreateNotebookDto): Promise<Notebook> {
+    // Verify the compute profile exists
+    const profileCheck = await this.db.query(
+      `SELECT id FROM compute_profiles WHERE id = $1`,
+      [dto.compute_profile_id],
+    );
+    if (profileCheck.rowCount === 0) {
+      throw new BadRequestException(
+        `Compute profile ${dto.compute_profile_id} not found. Create a compute profile first.`,
+      );
+    }
+
     const result = await this.db.query<Notebook>(
       `INSERT INTO notebooks (title, compute_profile_id)
        VALUES ($1, $2)
        RETURNING *`,
-      [dto.title ?? 'Untitled Notebook', dto.compute_profile_id ?? null],
+      [dto.title ?? 'Untitled Notebook', dto.compute_profile_id],
     );
     return result.rows[0];
   }

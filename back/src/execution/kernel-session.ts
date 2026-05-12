@@ -307,7 +307,16 @@ export class KernelSession {
         break;
 
       case 'execute_reply': {
-        // Final reply — clean up tracking
+        // Final reply — this is the definitive "execution complete" signal.
+        // Send cell:status idle to the client BEFORE cleaning up tracking,
+        // since the iopub status:idle message may not reliably map to a cellId.
+        if (parentMsgId && cellId) {
+          this.onMessage({
+            type: 'cell:status',
+            cell_id: cellId,
+            status: 'idle',
+          });
+        }
         if (parentMsgId) {
           this.pendingExecutions.delete(parentMsgId);
         }

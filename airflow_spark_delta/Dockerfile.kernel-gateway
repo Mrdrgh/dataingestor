@@ -1,14 +1,19 @@
-FROM python:3.10-slim
+FROM python:3.10-slim-bookworm
 
 USER root
 
-# Install OpenJDK 17 for Spark
+ARG DELTA_VERSION=3.1.0
+ARG CUSTOM_PIP_PACKAGES=""
+
+# Install OpenJDK 17 for Spark (bookworm default)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    openjdk-17-jre-headless curl && \
+    openjdk-17-jre-headless curl procps && \
     rm -rf /var/lib/apt/lists/*
 
 ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
 ENV PATH=$PATH:$JAVA_HOME/bin
+ENV DELTA_VERSION=$DELTA_VERSION
+ENV PYSPARK_SUBMIT_ARGS="--packages io.delta:delta-spark_2.12:${DELTA_VERSION} --conf spark.sql.extensions=io.delta.sql.DeltaSparkSessionExtension --conf spark.sql.catalog.spark_catalog=org.apache.spark.sql.delta.catalog.DeltaCatalog pyspark-shell"
 
 # Download Postgres JDBC driver (for Spark JDBC reads)
 RUN mkdir -p /opt/spark/jars && \
@@ -23,6 +28,10 @@ RUN pip install --no-cache-dir \
     "ipykernel" \
     "pandas" \
     "pyarrow"
+
+RUN if [ -n "$CUSTOM_PIP_PACKAGES" ]; then \
+            pip install --no-cache-dir $CUSTOM_PIP_PACKAGES; \
+        fi
 
 # Register the PySpark kernel
 RUN python -m ipykernel install --name pyspark --display-name "PySpark 3.5"

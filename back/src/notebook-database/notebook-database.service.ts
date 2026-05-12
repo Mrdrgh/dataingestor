@@ -60,10 +60,16 @@ export class NotebookDatabaseService implements OnModuleInit, OnModuleDestroy {
         auth_token      VARCHAR(512),
         delta_base_path VARCHAR(512) NOT NULL DEFAULT '/opt/spark/delta',
         spark_config    JSONB DEFAULT '{}',
+        custom_pip_packages JSONB DEFAULT '[]',
         status          VARCHAR(50) DEFAULT 'unknown',
         created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
+    `);
+
+    await this.pool.query(`
+      ALTER TABLE compute_profiles
+      ADD COLUMN IF NOT EXISTS custom_pip_packages JSONB DEFAULT '[]';
     `);
 
     await this.pool.query(`

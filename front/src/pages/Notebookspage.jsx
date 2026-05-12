@@ -79,22 +79,31 @@ function CreateModal({ profiles, onCreate, onClose }) {
   const [title, setTitle] = useState("Untitled Notebook");
   const [profileId, setProfileId] = useState(profiles[0]?.id || "");
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const canCreate = title.trim() && profileId;
 
   const handleCreate = async () => {
+    if (!canCreate) return;
     setLoading(true);
+    setError("");
     try {
       const res = await fetch(`${API_URL}/notebooks`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ title, compute_profile_id: profileId }),
       });
-      if (res.ok) { onCreate(await res.json()); }
-      else throw new Error();
+      if (res.ok) {
+        onCreate(await res.json());
+        onClose();
+      } else {
+        const data = await res.json().catch(() => ({}));
+        setError(data.message || `Failed to create notebook (${res.status})`);
+      }
     } catch {
-      onCreate({ id: `nb_${Date.now()}`, title, compute_profile_id: profileId, cells: [], created_at: new Date().toISOString(), updated_at: new Date().toISOString() });
+      setError("Network error — is the backend running?");
     }
     setLoading(false);
-    onClose();
   };
 
   return (
@@ -103,14 +112,16 @@ function CreateModal({ profiles, onCreate, onClose }) {
         <div style={s.modalTitle}>New Notebook</div>
         <label style={s.label}>Title</label>
         <input value={title} onChange={e => setTitle(e.target.value)} style={s.input} autoFocus onKeyDown={e => e.key === "Enter" && handleCreate()} />
-        <label style={s.label}>Compute Profile</label>
-        <select value={profileId} onChange={e => setProfileId(e.target.value)} style={s.input}>
-          <option value="">None</option>
+        <label style={s.label}>Compute Profile *</label>
+        <select value={profileId} onChange={e => setProfileId(e.target.value)} style={{ ...s.input, borderColor: !profileId ? "rgba(240,112,112,0.3)" : undefined }}>
+          <option value="" disabled>Select a compute profile…</option>
           {profiles.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
         </select>
+        {!profileId && <div style={{ fontSize: 11, color: "#f0a347" }}>A compute profile is required to run notebook cells.</div>}
+        {error && <div style={{ fontSize: 12, color: "#f07070", padding: "6px 0" }}>{error}</div>}
         <div style={s.modalActions}>
           <button style={s.cancelBtn} onClick={onClose}>Cancel</button>
-          <button style={s.createBtn} onClick={handleCreate} disabled={loading || !title.trim()}>
+          <button style={{ ...s.createBtn, opacity: canCreate ? 1 : 0.5 }} onClick={handleCreate} disabled={loading || !canCreate}>
             {loading ? "Creating…" : "Create notebook"}
           </button>
         </div>

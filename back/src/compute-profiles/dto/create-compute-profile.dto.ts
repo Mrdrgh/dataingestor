@@ -1,4 +1,10 @@
-import { IsString, IsOptional, IsObject, IsUrl } from 'class-validator';
+import {
+  IsString,
+  IsOptional,
+  IsObject,
+  IsUrl,
+  IsArray,
+} from 'class-validator';
 
 export class CreateComputeProfileDto {
   @IsString()
@@ -18,4 +24,9 @@ export class CreateComputeProfileDto {
   @IsOptional()
   @IsObject()
   spark_config?: Record<string, string>;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  custom_pip_packages?: string[];
 }

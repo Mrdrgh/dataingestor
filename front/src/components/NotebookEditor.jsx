@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 
 const WS_URL = "ws://localhost:3001/ws/notebook";
 const API_URL = "http://localhost:3001";
@@ -20,17 +20,12 @@ const newId = () => `cell-${Date.now()}-${_id++}`;
 const makeCell = (type = "code", source = "") => ({ id: newId(), type, source, outputs: [], execution_count: null, metadata: {} });
 
 function CellOutput({ outputs, running }) {
-  if (running) return (
-    <div style={s.outputWrap}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        <div style={spin} /><span style={{ fontSize: 11, color: "#59647a" }}>Running…</span>
-      </div>
-    </div>
-  );
-  if (!outputs?.length) return null;
+  // Show outputs AND running indicator together (like Jupyter — stream in real-time)
+  const hasOutputs = outputs?.length > 0;
+  if (!running && !hasOutputs) return null;
   return (
     <div style={s.outputWrap}>
-      {outputs.map((out, i) => {
+      {hasOutputs && outputs.map((out, i) => {
         if (out.output_type === "stream") return <pre key={i} style={{ ...s.pre, color: out.name === "stderr" ? "#f07070" : "#c8d4e8" }}>{out.text}</pre>;
         if (out.output_type === "execute_result" || out.output_type === "display_data") {
           if (out.data?.["text/html"]) return <div key={i} style={s.outputHtml} dangerouslySetInnerHTML={{ __html: out.data["text/html"] }} />;
@@ -39,16 +34,31 @@ function CellOutput({ outputs, running }) {
         if (out.output_type === "error") return <pre key={i} style={{ ...s.pre, color: "#f07070" }}>{out.ename}: {out.evalue}{"\n"}{(out.traceback || []).join("\n")}</pre>;
         return null;
       })}
+      {running && (
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: hasOutputs ? 6 : 0 }}>
+          <div style={spin} /><span style={{ fontSize: 11, color: "#59647a" }}>Running…</span>
+        </div>
+      )}
     </div>
   );
 }
 
-function Cell({ cell, index, total, selected, kernelStatus, onSelect, onUpdate, onDelete, onMoveUp, onMoveDown, onExecute }) {
+function Cell({ cell, index, total, selected, kernelStatus, onSelect, onUpdate, onDelete, onMoveUp, onMoveDown, onExecute, onStop }) {
   const taRef = useRef(null);
   const running = cell.metadata?.running === true;
   const canRun = kernelStatus === "ready" || kernelStatus === "idle";
 
   const autoResize = () => { const t = taRef.current; if (t) { t.style.height = "auto"; t.style.height = t.scrollHeight + "px"; } };
+
+  const handleRunStop = (e) => {
+    e.stopPropagation();
+    if (running) {
+      // BUG 1 FIX: Stop sends interrupt, not re-execute
+      onStop(cell.id);
+    } else {
+      onExecute(cell.id);
+    }
+  };
 
   return (
     <div style={{ ...s.cell, ...(selected ? s.cellSel : {}) }} onClick={() => onSelect(cell.id)}>
@@ -64,7 +74,7 @@ function Cell({ cell, index, total, selected, kernelStatus, onSelect, onUpdate, 
         <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
           {cell.type === "code" && (
             <button style={{ ...s.cellBtn, color: running ? "#f07070" : canRun ? "#2ec995" : "#3d4a5c" }}
-              onClick={e => { e.stopPropagation(); onExecute(cell.id); }} disabled={!canRun && !running}>
+              onClick={handleRunStop} disabled={!canRun && !running}>
               {running ? <IconStop /> : <IconPlay />}
             </button>
           )}
@@ -75,7 +85,7 @@ function Cell({ cell, index, total, selected, kernelStatus, onSelect, onUpdate, 
       </div>
       <textarea ref={taRef} value={cell.source}
         onChange={e => { onUpdate(cell.id, { source: e.target.value }); autoResize(); }}
-        onKeyDown={e => { if (e.key === "Enter" && (e.ctrlKey || e.shiftKey)) { e.preventDefault(); onExecute(cell.id); } }}
+        onKeyDown={e => { if (e.key === "Enter" && (e.ctrlKey || e.shiftKey)) { e.preventDefault(); if (!running) onExecute(cell.id); } }}
         onFocus={() => onSelect(cell.id)}
         style={{ ...s.ta, fontFamily: cell.type === "code" ? "'IBM Plex Mono', monospace" : "'IBM Plex Sans', sans-serif" }}
         placeholder={cell.type === "code" ? "# PySpark code… (Shift+Enter to run)" : "Markdown…"}
@@ -96,6 +106,12 @@ export default function NotebookEditor({ notebook, computeProfiles, onBack, onSa
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState("");
   const wsRef = useRef(null);
+  const cellsRef = useRef(cells);
+  cellsRef.current = cells;
+
+  const clearAllRunning = useCallback(() => {
+    setCells(p => p.map(c => c.metadata?.running ? { ...c, metadata: { ...c.metadata, running: false } } : c));
+  }, []);
 
   const connectKernel = useCallback(() => {
     if (wsRef.current) wsRef.current.close();
@@ -106,8 +122,14 @@ export default function NotebookEditor({ notebook, computeProfiles, onBack, onSa
     ws.onmessage = (e) => {
       const msg = JSON.parse(e.data);
       if (msg.type === "kernel:ready") setKernelStatus("idle");
-      if (msg.type === "kernel:error") setKernelStatus("dead");
-      if (msg.type === "kernel:status") setKernelStatus(msg.status);
+      if (msg.type === "kernel:error") { setKernelStatus("dead"); clearAllRunning(); }
+      if (msg.type === "kernel:status") {
+        setKernelStatus(msg.status);
+        // When kernel dies, clear all running flags
+        if (msg.status === "dead") clearAllRunning();
+        // Safety net: when kernel goes globally idle, no cell should be running
+        if (msg.status === "idle") clearAllRunning();
+      }
       if (msg.type === "cell:status") setCells(p => p.map(c => c.id === msg.cell_id ? { ...c, metadata: { ...c.metadata, running: msg.status === "busy" } } : c));
       if (msg.type === "cell:stream") setCells(p => p.map(c => {
         if (c.id !== msg.cell_id) return c;
@@ -119,18 +141,45 @@ export default function NotebookEditor({ notebook, computeProfiles, onBack, onSa
       if (msg.type === "cell:error") setCells(p => p.map(c => c.id === msg.cell_id ? { ...c, metadata: { ...c.metadata, running: false }, outputs: [...c.outputs, { output_type: "error", ename: msg.ename, evalue: msg.evalue, traceback: msg.traceback }] } : c));
       if (msg.type === "cell:display_data") setCells(p => p.map(c => c.id === msg.cell_id ? { ...c, outputs: [...c.outputs, { output_type: "display_data", data: msg.data }] } : c));
     };
-    ws.onerror = () => setKernelStatus("dead");
-    ws.onclose = () => setKernelStatus(k => k !== "dead" ? "disconnected" : k);
-  }, [notebook.id, profileId]);
+    ws.onerror = () => { setKernelStatus("dead"); clearAllRunning(); };
+    // BUG 4 FIX: On WS close, clear all running flags
+    ws.onclose = () => {
+      setKernelStatus(k => k !== "dead" ? "disconnected" : k);
+      clearAllRunning();
+    };
+  }, [notebook.id, profileId, clearAllRunning]);
+
+  // Clean up WS on unmount
+  useEffect(() => {
+    return () => {
+      if (wsRef.current) {
+        wsRef.current.close();
+        wsRef.current = null;
+      }
+    };
+  }, []);
 
   const send = (msg) => { if (wsRef.current?.readyState === WebSocket.OPEN) wsRef.current.send(JSON.stringify(msg)); };
 
-  const executeCell = (cellId) => {
-    const cell = cells.find(c => c.id === cellId);
+  const executeCell = useCallback((cellId) => {
+    // Use ref to get the latest cell content (important for Run All)
+    const cell = cellsRef.current.find(c => c.id === cellId);
     if (!cell || cell.type !== "code") return;
     setCells(p => p.map(c => c.id === cellId ? { ...c, outputs: [], metadata: { ...c.metadata, running: true } } : c));
     send({ type: "cell:execute", notebook_id: notebook.id, cell_id: cellId, code: cell.source });
-  };
+  }, [notebook.id]);
+
+  // Dedicated stop function — sends interrupt, marks cell as not running
+  const stopCell = useCallback((cellId) => {
+    send({ type: "kernel:interrupt", notebook_id: notebook.id });
+    setCells(p => p.map(c => c.id === cellId ? { ...c, metadata: { ...c.metadata, running: false } } : c));
+  }, [notebook.id]);
+
+  // Run All: execute code cells in current visual order (kernel queues them sequentially)
+  const runAll = useCallback(() => {
+    const codeCells = cellsRef.current.filter(c => c.type === "code");
+    codeCells.forEach(c => executeCell(c.id));
+  }, [executeCell]);
 
   const addCell = (type = "code") => {
     const cell = makeCell(type);
@@ -184,7 +233,7 @@ export default function NotebookEditor({ notebook, computeProfiles, onBack, onSa
             {kernelStatus === "connecting" ? <><div style={spin} />Connecting…</> : "Connect kernel"}
           </button>
           <div style={s.divider} />
-          <button style={{ ...s.btn, color: "#2ec995" }} onClick={() => cells.filter(c => c.type === "code").forEach(c => executeCell(c.id))}><IconPlay /> Run all</button>
+          <button style={{ ...s.btn, color: "#2ec995" }} onClick={runAll}><IconPlay /> Run all</button>
           <button style={s.btn} onClick={() => send({ type: "kernel:restart", notebook_id: notebook.id })}><IconRestart /></button>
           <button style={s.btn} onClick={() => setCells(p => p.map(c => ({ ...c, outputs: [], execution_count: null, metadata: {} })))}>Clear</button>
           <div style={s.divider} />
@@ -198,7 +247,8 @@ export default function NotebookEditor({ notebook, computeProfiles, onBack, onSa
         {cells.map((cell, i) => (
           <Cell key={cell.id} cell={cell} index={i} total={cells.length} selected={selected === cell.id}
             kernelStatus={kernelStatus} onSelect={setSelected} onUpdate={updateCell}
-            onDelete={deleteCell} onMoveUp={id => moveCell(id, "up")} onMoveDown={id => moveCell(id, "down")} onExecute={executeCell} />
+            onDelete={deleteCell} onMoveUp={id => moveCell(id, "up")} onMoveDown={id => moveCell(id, "down")}
+            onExecute={executeCell} onStop={stopCell} />
         ))}
         <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
           <button style={s.addBtn} onClick={() => addCell("code")}><IconPlus /> Code cell</button>

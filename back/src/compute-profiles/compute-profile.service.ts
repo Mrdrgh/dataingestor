@@ -17,6 +17,7 @@ export interface ComputeProfile {
   auth_token: string | null;
   delta_base_path: string;
   spark_config: Record<string, string>;
+  custom_pip_packages: string[];
   status: string;
   created_at: string;
   updated_at: string;
@@ -31,7 +32,7 @@ export class ComputeProfileService {
   async findAll(): Promise<ComputeProfile[]> {
     const result = await this.db.query<ComputeProfile>(
       `SELECT id, name, kernel_gateway_url, auth_token, delta_base_path,
-              spark_config, status, created_at, updated_at
+              spark_config, custom_pip_packages, status, created_at, updated_at
        FROM compute_profiles
        ORDER BY created_at DESC`,
     );
@@ -41,7 +42,7 @@ export class ComputeProfileService {
   async findOne(id: string): Promise<ComputeProfile> {
     const result = await this.db.query<ComputeProfile>(
       `SELECT id, name, kernel_gateway_url, auth_token, delta_base_path,
-              spark_config, status, created_at, updated_at
+              spark_config, custom_pip_packages, status, created_at, updated_at
        FROM compute_profiles
        WHERE id = $1`,
       [id],
@@ -56,8 +57,8 @@ export class ComputeProfileService {
 
   async create(dto: CreateComputeProfileDto): Promise<ComputeProfile> {
     const result = await this.db.query<ComputeProfile>(
-      `INSERT INTO compute_profiles (name, kernel_gateway_url, auth_token, delta_base_path, spark_config)
-       VALUES ($1, $2, $3, $4, $5)
+      `INSERT INTO compute_profiles (name, kernel_gateway_url, auth_token, delta_base_path, spark_config, custom_pip_packages)
+       VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING *`,
       [
         dto.name,
@@ -65,6 +66,7 @@ export class ComputeProfileService {
         dto.auth_token ?? null,
         dto.delta_base_path ?? '/opt/spark/delta',
         JSON.stringify(dto.spark_config ?? {}),
+        JSON.stringify(dto.custom_pip_packages ?? []),
       ],
     );
     return result.rows[0];
@@ -100,6 +102,10 @@ export class ComputeProfileService {
     if (dto.spark_config !== undefined) {
       fields.push(`spark_config = $${paramIndex++}`);
       values.push(JSON.stringify(dto.spark_config));
+    }
+    if (dto.custom_pip_packages !== undefined) {
+      fields.push(`custom_pip_packages = $${paramIndex++}`);
+      values.push(JSON.stringify(dto.custom_pip_packages));
     }
 
     if (fields.length === 0) {

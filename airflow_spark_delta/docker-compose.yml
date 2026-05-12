@@ -115,6 +115,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.kernel-gateway
+      args:
+        DELTA_VERSION: ${DELTA_VERSION:-3.1.0}
+        CUSTOM_PIP_PACKAGES: ${KERNEL_PIP_PACKAGES:-}
     ports:
       - "8888:8888"
     environment:
