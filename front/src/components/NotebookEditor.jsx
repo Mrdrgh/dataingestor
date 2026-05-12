@@ -1,23 +1,87 @@
 import { useState, useRef, useCallback, useEffect } from "react";
+import { EditorView, keymap, lineNumbers, highlightActiveLine } from "@codemirror/view";
+import { EditorState } from "@codemirror/state";
+import { python } from "@codemirror/lang-python";
+import { oneDark } from "@codemirror/theme-one-dark";
+import { defaultKeymap, indentWithTab } from "@codemirror/commands";
+import { bracketMatching, foldGutter } from "@codemirror/language";
+import { autocompletion, closeBrackets } from "@codemirror/autocomplete";
 
 const WS_URL = "ws://localhost:3001/ws/notebook";
 const API_URL = "http://localhost:3001";
 
-const IconPlay = () => (<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>);
-const IconStop = () => (<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>);
-const IconRestart = () => (<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>);
-const IconPlus = () => (<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>);
-const IconTrash = () => (<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>);
-const IconCode = () => (<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>);
-const IconMd = () => (<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>);
-const IconArrowUp = () => (<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>);
-const IconArrowDown = () => (<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg>);
-const IconBack = () => (<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 18 9 12 15 6"/></svg>);
-const IconSave = () => (<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>);
+const IconPlay = () => (<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3" /></svg>);
+const IconStop = () => (<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="3" width="18" height="18" rx="2" /></svg>);
+const IconRestart = () => (<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="23 4 23 10 17 10" /><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" /></svg>);
+const IconPlus = () => (<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>);
+const IconTrash = () => (<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /><path d="M10 11v6" /><path d="M14 11v6" /><path d="M9 6V4h6v2" /></svg>);
+const IconCode = () => (<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="16 18 22 12 16 6" /><polyline points="8 6 2 12 8 18" /></svg>);
+const IconMd = () => (<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /></svg>);
+const IconArrowUp = () => (<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="19" x2="12" y2="5" /><polyline points="5 12 12 5 19 12" /></svg>);
+const IconArrowDown = () => (<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19" /><polyline points="19 12 12 19 5 12" /></svg>);
+const IconBack = () => (<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 18 9 12 15 6" /></svg>);
+const IconSave = () => (<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" /><polyline points="17 21 17 13 7 13 7 21" /><polyline points="7 3 7 8 15 8" /></svg>);
 
 let _id = 0;
 const newId = () => `cell-${Date.now()}-${_id++}`;
 const makeCell = (type = "code", source = "") => ({ id: newId(), type, source, outputs: [], execution_count: null, metadata: {} });
+
+// ── CodeMirror 6 editor — only used for code cells ──────────────────────────
+function CodeEditor({ value, onChange, onRunShortcut }) {
+  const containerRef = useRef(null);
+  const viewRef = useRef(null);
+  const onChangeRef = useRef(onChange);
+  const onRunRef = useRef(onRunShortcut);
+  onChangeRef.current = onChange;
+  onRunRef.current = onRunShortcut;
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+    const runKeys = keymap.of([
+      { key: "Shift-Enter", run: () => { onRunRef.current?.(); return true; } },
+      { key: "Ctrl-Enter",  run: () => { onRunRef.current?.(); return true; } },
+    ]);
+    const theme = EditorView.theme({
+      "&":                    { backgroundColor: "transparent", fontSize: "13px", fontFamily: "'IBM Plex Mono','Fira Code',monospace" },
+      ".cm-content":          { padding: "12px 14px", minHeight: "60px", caretColor: "#4a9eff" },
+      ".cm-focused":          { outline: "none" },
+      ".cm-line":             { lineHeight: "1.7" },
+      ".cm-gutters":          { backgroundColor: "rgba(0,0,0,0.25)", border: "none", borderRight: "1px solid rgba(255,255,255,0.06)", color: "#3d4a5c", minWidth: "40px" },
+      ".cm-activeLineGutter": { backgroundColor: "rgba(30,110,244,0.08)" },
+      ".cm-activeLine":       { backgroundColor: "rgba(30,110,244,0.05)" },
+      ".cm-cursor":           { borderLeftColor: "#4a9eff" },
+      ".cm-selectionBackground, ::selection": { backgroundColor: "rgba(30,110,244,0.25) !important" },
+    }, { dark: true });
+
+    const state = EditorState.create({
+      doc: value,
+      extensions: [
+        oneDark, theme,
+        python(),
+        lineNumbers(), foldGutter(), bracketMatching(), closeBrackets(),
+        highlightActiveLine(), autocompletion(),
+        keymap.of([...defaultKeymap, indentWithTab]),
+        runKeys,
+        EditorView.updateListener.of(u => { if (u.docChanged) onChangeRef.current(u.state.doc.toString()); }),
+        EditorView.lineWrapping,
+      ],
+    });
+    const view = new EditorView({ state, parent: containerRef.current });
+    viewRef.current = view;
+    return () => { view.destroy(); viewRef.current = null; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // mount once
+
+  // keep editor in sync when value changes externally
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view) return;
+    const cur = view.state.doc.toString();
+    if (cur !== value) view.dispatch({ changes: { from: 0, to: cur.length, insert: value } });
+  }, [value]);
+
+  return <div ref={containerRef} style={{ width: "100%", minHeight: 60 }} />;
+}
 
 function CellOutput({ outputs, running }) {
   // Show outputs AND running indicator together (like Jupyter — stream in real-time)
@@ -83,15 +147,23 @@ function Cell({ cell, index, total, selected, kernelStatus, onSelect, onUpdate, 
           <button style={{ ...s.cellBtn, color: "#f07070" }} onClick={e => { e.stopPropagation(); onDelete(cell.id); }}><IconTrash /></button>
         </div>
       </div>
-      <textarea ref={taRef} value={cell.source}
-        onChange={e => { onUpdate(cell.id, { source: e.target.value }); autoResize(); }}
-        onKeyDown={e => { if (e.key === "Enter" && (e.ctrlKey || e.shiftKey)) { e.preventDefault(); if (!running) onExecute(cell.id); } }}
-        onFocus={() => onSelect(cell.id)}
-        style={{ ...s.ta, fontFamily: cell.type === "code" ? "'IBM Plex Mono', monospace" : "'IBM Plex Sans', sans-serif" }}
-        placeholder={cell.type === "code" ? "# PySpark code… (Shift+Enter to run)" : "Markdown…"}
-        spellCheck={false}
-        rows={Math.max(3, cell.source.split("\n").length)}
-      />
+      {cell.type === "code" ? (
+        <CodeEditor
+          value={cell.source}
+          onChange={src => onUpdate(cell.id, { source: src })}
+          onRunShortcut={() => { if (!running) onExecute(cell.id); }}
+        />
+      ) : (
+        <textarea ref={taRef} value={cell.source}
+          onChange={e => { onUpdate(cell.id, { source: e.target.value }); autoResize(); }}
+          onKeyDown={e => { if (e.key === "Enter" && (e.ctrlKey || e.shiftKey)) { e.preventDefault(); if (!running) onExecute(cell.id); } }}
+          onFocus={() => onSelect(cell.id)}
+          style={{ ...s.ta, fontFamily: "'IBM Plex Sans', sans-serif" }}
+          placeholder="Markdown…"
+          spellCheck={false}
+          rows={Math.max(3, cell.source.split("\n").length)}
+        />
+      )}
       <CellOutput outputs={cell.outputs} running={running} />
     </div>
   );
