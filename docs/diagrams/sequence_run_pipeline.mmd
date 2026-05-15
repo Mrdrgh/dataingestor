@@ -1,0 +1,29 @@
+sequenceDiagram
+  autonumber
+  participant Airflow as Airflow Scheduler
+  participant NestAPI as NestJS Internal API
+  participant SparkOp as Spark Operator
+  participant Driver as Spark Driver Pod
+  participant Crypto as CryptoService
+  participant Executors as Spark Executors
+  participant Source as Source DB
+  participant Delta as Delta Lake
+
+  Airflow->>NestAPI: GET /internal/pipelines/active
+  NestAPI-->>Airflow: active pipelines
+  Airflow->>Airflow: build DAGs in memory
+
+  Airflow->>SparkOp: submit SparkApplication
+  SparkOp->>Driver: start driver pod
+
+  Driver->>NestAPI: GET /internal/pipelines/{id}/runtime-config
+  NestAPI->>Crypto: decrypt credentials
+  Crypto-->>NestAPI: plaintext secrets
+  NestAPI-->>Driver: runtime config + creds
+
+  Driver->>SparkOp: request executors
+  SparkOp->>Executors: start pods
+  Executors->>Source: extract data
+  Executors->>Delta: write Delta
+  Executors-->>Driver: complete
+  Driver-->>SparkOp: exit success

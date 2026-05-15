@@ -1,0 +1,38 @@
+apiVersion: sparkoperator.k8s.io/v1beta2
+kind: SparkApplication
+metadata:
+  name: ingest-PIPELINE_ID-RUN_ID
+  namespace: data-platform
+spec:
+  type: Python
+  mode: cluster
+  image: "registry.example.com/ingest-postgres:latest"
+  imagePullPolicy: IfNotPresent
+  mainApplicationFile: "local:///opt/spark/jobs/main.py"
+  arguments:
+    - "--pipeline-id"
+    - "PIPELINE_ID"
+    - "--run-id"
+    - "RUN_ID"
+  sparkVersion: "3.5.1"
+  restartPolicy:
+    type: Never
+  dynamicAllocation:
+    enabled: true
+    initialExecutors: 1
+    minExecutors: 0
+    maxExecutors: 10
+  driver:
+    cores: 1
+    memory: "1024m"
+    serviceAccount: spark-operator
+    env:
+      - name: INTERNAL_API_URL
+        value: "http://backend:3001/internal"
+      - name: INTERNAL_API_AUTH_MODE
+        value: "api_key"
+      - name: INTERNAL_API_KEY
+        value: "REPLACE_ME"
+  executor:
+    cores: 2
+    memory: "4096m"

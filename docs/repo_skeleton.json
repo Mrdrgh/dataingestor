@@ -1,0 +1,179 @@
+{
+  "back": {
+    "type": "dir",
+    "description": "NestJS control plane in DDD layout.",
+    "children": {
+      "src": {
+        "type": "dir",
+        "description": "Application source.",
+        "children": {
+          "core": {
+            "type": "dir",
+            "description": "Cross-cutting infrastructure.",
+            "children": {
+              "config": {
+                "type": "dir",
+                "description": "Env validation and config loading."
+              },
+              "platform-database": {
+                "type": "dir",
+                "description": "Platform state and migrations.",
+                "children": {
+                  "platform-database.service.ts": {
+                    "type": "file",
+                    "description": "DB access for platform tables.",
+                    "template": "import { Injectable } from \"@nestjs/common\";\n\n@Injectable()\nexport class PlatformDatabaseService {\n  async query(sql: string, params: any[] = []) {\n    // TODO: implement query execution\n    return [];\n  }\n}\n"
+                  }
+                }
+              },
+              "crypto": {
+                "type": "dir",
+                "description": "Credential encryption utilities.",
+                "children": {
+                  "crypto.service.ts": {
+                    "type": "file",
+                    "description": "AES-256-GCM encrypt/decrypt for connector creds.",
+                    "template": "import { Injectable } from \"@nestjs/common\";\nimport crypto from \"crypto\";\n\n@Injectable()\nexport class CryptoService {\n  private readonly key = Buffer.from(process.env.PLATFORM_SECRET_KEY || \"\", \"base64\");\n\n  encrypt(plain: string): string {\n    const iv = crypto.randomBytes(12);\n    const cipher = crypto.createCipheriv(\"aes-256-gcm\", this.key, iv);\n    const encrypted = Buffer.concat([cipher.update(plain, \"utf8\"), cipher.final()]);\n    const tag = cipher.getAuthTag();\n    return Buffer.concat([iv, tag, encrypted]).toString(\"base64\");\n  }\n\n  decrypt(payload: string): string {\n    const raw = Buffer.from(payload, \"base64\");\n    const iv = raw.subarray(0, 12);\n    const tag = raw.subarray(12, 28);\n    const data = raw.subarray(28);\n    const decipher = crypto.createDecipheriv(\"aes-256-gcm\", this.key, iv);\n    decipher.setAuthTag(tag);\n    return Buffer.concat([decipher.update(data), decipher.final()]).toString(\"utf8\");\n  }\n}\n"
+                  },
+                  "crypto.service.spec.ts": {
+                    "type": "file",
+                    "description": "Round-trip crypto tests.",
+                    "template": "import { CryptoService } from \"./crypto.service\";\n\ndescribe(\"CryptoService\", () => {\n  it(\"round trips plaintext\", () => {\n    process.env.PLATFORM_SECRET_KEY = Buffer.alloc(32, 1).toString(\"base64\");\n    const svc = new CryptoService();\n    const enc = svc.encrypt(\"test\");\n    const dec = svc.decrypt(enc);\n    expect(dec).toBe(\"test\");\n  });\n});\n"
+                  }
+                }
+              }
+            }
+          },
+          "connectors": {
+            "type": "dir",
+            "description": "Connector plugin system.",
+            "children": {
+              "connector.registry.ts": {
+                "type": "file",
+                "description": "Registry for source connectors.",
+                "template": "import { Injectable, NotFoundException } from \"@nestjs/common\";\nimport { IConnector } from \"./interfaces/connector.interface\";\n\n@Injectable()\nexport class ConnectorRegistryService {\n  private readonly connectors = new Map<string, IConnector>();\n\n  register(connector: IConnector) {\n    this.connectors.set(connector.type, connector);\n  }\n\n  getConnector(type: string): IConnector {\n    const connector = this.connectors.get(type);\n    if (!connector) {\n      throw new NotFoundException(`Connector type '${type}' is not supported.`);\n    }\n    return connector;\n  }\n}\n"
+              },
+              "interfaces": {
+                "type": "dir",
+                "description": "Connector interfaces.",
+                "children": {
+                  "connector.interface.ts": {
+                    "type": "file",
+                    "description": "IConnector contract.",
+                    "template": "export interface SchemaDef {\n  name: string;\n  tables: { name: string; type: \"table\" | \"view\" }[];\n}\n\nexport interface IConnector {\n  readonly type: string;\n  getExecutionImage(): string;\n  validateConfig(config: unknown): boolean;\n  testConnection(config: unknown, credentials: unknown): Promise<boolean>;\n  discoverSchemas(config: unknown, credentials: unknown): Promise<SchemaDef[]>;\n  discoverColumns(config: unknown, credentials: unknown, schema: string, table: string): Promise<any[]>;\n}\n"
+                  }
+                }
+              },
+              "plugins": {
+                "type": "dir",
+                "description": "Connector implementations.",
+                "children": {
+                  "postgres": {
+                    "type": "dir",
+                    "description": "Postgres connector.",
+                    "children": {
+                      "postgres.connector.ts": {
+                        "type": "file",
+                        "description": "Postgres connector implementation.",
+                        "template": "import { IConnector, SchemaDef } from \"../../interfaces/connector.interface\";\n\nexport class PostgresConnector implements IConnector {\n  readonly type = \"postgres\";\n\n  getExecutionImage(): string {\n    return \"registry.example.com/ingest-postgres:latest\";\n  }\n\n  validateConfig(config: unknown): boolean {\n    return !!config;\n  }\n\n  async testConnection(config: unknown, credentials: unknown): Promise<boolean> {\n    return true;\n  }\n\n  async discoverSchemas(config: unknown, credentials: unknown): Promise<SchemaDef[]> {\n    return [];\n  }\n\n  async discoverColumns(config: unknown, credentials: unknown, schema: string, table: string): Promise<any[]> {\n    return [];\n  }\n}\n"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "orchestration": {
+            "type": "dir",
+            "description": "Orchestration abstraction layer.",
+            "children": {
+              "interfaces": {
+                "type": "dir",
+                "description": "Orchestrator contracts.",
+                "children": {
+                  "orchestrator.interface.ts": {
+                    "type": "file",
+                    "description": "IOrchestratorService interface.",
+                    "template": "export interface IOrchestratorService {\n  triggerRun(pipelineId: string, conf?: Record<string, unknown>): Promise<{ runId: string }>;\n  getRunStatus(dagId: string, runId: string): Promise<{ state: string }>;\n  getLogs(dagId: string, runId: string, taskId: string): Promise<string>;\n}\n"
+                  }
+                }
+              },
+              "providers": {
+                "type": "dir",
+                "description": "Orchestration providers.",
+                "children": {
+                  "airflow": {
+                    "type": "dir",
+                    "description": "Airflow implementation.",
+                    "children": {
+                      "airflow.provider.ts": {
+                        "type": "file",
+                        "description": "Airflow provider implementation.",
+                        "template": "import { Injectable } from \"@nestjs/common\";\nimport { IOrchestratorService } from \"../../interfaces/orchestrator.interface\";\n\n@Injectable()\nexport class AirflowProvider implements IOrchestratorService {\n  async triggerRun(pipelineId: string, conf: Record<string, unknown> = {}) {\n    return { runId: \"todo\" };\n  }\n\n  async getRunStatus(dagId: string, runId: string) {\n    return { state: \"unknown\" };\n  }\n\n  async getLogs(dagId: string, runId: string, taskId: string) {\n    return \"\";\n  }\n}\n"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "features": {
+            "type": "dir",
+            "description": "Business features.",
+            "children": {
+              "connections": {
+                "type": "dir",
+                "description": "Connection CRUD and tests."
+              },
+              "pipelines": {
+                "type": "dir",
+                "description": "Pipeline definitions and runtime API.",
+                "children": {
+                  "pipelines.service.ts": {
+                    "type": "file",
+                    "description": "Pipeline CRUD and validation.",
+                    "template": "export class PipelinesService {\n  async list() {\n    return [];\n  }\n\n  async create(dto: unknown) {\n    return dto;\n  }\n\n  async validate(dto: unknown) {\n    return { valid: true };\n  }\n\n  async getActive() {\n    return [];\n  }\n}\n"
+                  },
+                  "internal.controller.ts": {
+                    "type": "file",
+                    "description": "Internal runtime-config endpoint.",
+                    "template": "import { Controller, Get, Param, Query } from \"@nestjs/common\";\n\n@Controller(\"internal/pipelines\")\nexport class InternalRuntimeController {\n  @Get(\"active\")\n  getActivePipelines() {\n    return [];\n  }\n\n  @Get(\":pipelineId/runtime-config\")\n  getRuntimeConfig(@Param(\"pipelineId\") pipelineId: string, @Query(\"runId\") runId: string) {\n    return { pipelineId, runId };\n  }\n}\n"
+                  }
+                }
+              },
+              "workspace": {
+                "type": "dir",
+                "description": "Notebooks, profiles, execution.",
+                "children": {
+                  "kernel-bundler.service.ts": {
+                    "type": "file",
+                    "description": "Kernel bootstrap with decrypted configs.",
+                    "template": "export class KernelBundlerService {\n  async bootstrapKernel(profileId: string, session: { execute: Function }) {\n    const code = \"# bootstrap code\";\n    return session.execute(code, true);\n  }\n}\n"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "airflow": {
+    "type": "dir",
+    "description": "Airflow DAGs and operators.",
+    "children": {
+      "dags": {
+        "type": "dir",
+        "description": "dynamic_dag_builder.py and runtime DAGs."
+      }
+    }
+  },
+  "ingestion-images": {
+    "type": "dir",
+    "description": "Connector-specific Spark images and jobs."
+  },
+  "docs": {
+    "type": "dir",
+    "description": "Architecture documentation and diagrams."
+  }
+}

@@ -1,0 +1,72 @@
+@startuml
+skinparam classAttributeIconSize 0
+
+class ReactFrontend
+class PipelinesController
+class ConnectionsController
+class ExecutionGateway
+class PipelinesService
+class ConnectorRegistryService
+interface IConnector
+class PostgresConnector
+class SalesforceConnector
+class CryptoService
+class PlatformDatabaseService
+interface IOrchestratorService
+class AirflowProvider
+class InternalRuntimeController
+class DynamicDagBuilder
+class IngestionJob
+class LateBindingClient
+class SparkSessionFactory
+interface ISourceReader
+class JDBCSourceReader
+class SalesforceSourceReader
+class DeltaDestinationWriter
+class KernelAdapterService
+class KernelBundlerService
+class KernelSession
+class ComputeProfileService
+class NotebookService
+
+ReactFrontend --> PipelinesController : HTTP
+ReactFrontend --> ExecutionGateway : WS
+
+PipelinesController --> PipelinesService
+ConnectionsController --> ConnectorRegistryService
+PipelinesService --> ConnectorRegistryService
+PipelinesService --> PlatformDatabaseService
+PipelinesService --> IOrchestratorService
+
+ConnectorRegistryService o-- IConnector
+IConnector <|.. PostgresConnector
+IConnector <|.. SalesforceConnector
+
+InternalRuntimeController --> CryptoService
+InternalRuntimeController --> PlatformDatabaseService
+InternalRuntimeController --> ConnectorRegistryService
+
+IOrchestratorService <|.. AirflowProvider
+
+DynamicDagBuilder --> InternalRuntimeController : fetch active pipelines
+DynamicDagBuilder --> AirflowProvider : submit SparkApplication
+
+AirflowProvider --> IngestionJob : trigger
+
+IngestionJob --> LateBindingClient
+LateBindingClient --> InternalRuntimeController : fetch runtime config
+IngestionJob --> SparkSessionFactory
+IngestionJob --> ISourceReader
+ISourceReader <|.. JDBCSourceReader
+ISourceReader <|.. SalesforceSourceReader
+IngestionJob --> DeltaDestinationWriter
+
+ExecutionGateway --> KernelAdapterService
+KernelAdapterService --> ComputeProfileService
+KernelAdapterService --> KernelBundlerService
+KernelAdapterService *-- KernelSession
+KernelBundlerService --> CryptoService
+KernelBundlerService --> KernelSession
+NotebookService --> PlatformDatabaseService
+ComputeProfileService --> PlatformDatabaseService
+@enduml
